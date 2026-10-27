@@ -175,10 +175,18 @@ export class Editor {
     ctx.mobile = createMobileChrome(ctx, this.el);
     root.replaceChildren(this.el);
     root.removeAttribute('aria-busy');
+    window.__editor = this;
     // The saved panel widths are kept; the ones shown are fitted to the space there is.
     this._panelW = { left: p.leftW, right: p.rightW };
     this._workspace = body.querySelector('.workspace');
-    this._fitObserver = new ResizeObserver(() => this.fitPanels());
+    let lastW = this._workspaceWidth();
+    this._fitObserver = new ResizeObserver(() => {
+      const w = this._workspaceWidth();
+      if (Math.abs(w - lastW) >= 1) {
+        lastW = w;
+        this.fitPanels();
+      }
+    });
     this._fitObserver.observe(this._workspace);
     this.fitPanels();
     // Rulers are drawn on canvases in theme colors, so redraw them when the theme changes.
@@ -527,12 +535,14 @@ export class Editor {
     const [left, right] = this.shownPanelWidths(room);
     const st = this.el.style;
     const changed = st.getPropertyValue('--left-w') !== `${left}px` || st.getPropertyValue('--right-w') !== `${right}px`;
-    st.setProperty('--left-w', `${left}px`);
-    st.setProperty('--right-w', `${right}px`);
+    if (changed) {
+      st.setProperty('--left-w', `${left}px`);
+      st.setProperty('--right-w', `${right}px`);
+    }
     for (const [which, w, other] of [['left', left, right], ['right', right, left]]) {
       const [lo, hi] = PANEL_LIMITS[which];
-      this._panelResizers[which].setAttribute('aria-valuenow', String(Math.round(w)));
-      this._panelResizers[which].setAttribute('aria-valuemax', String(Math.round(Math.max(lo, Math.min(hi, room - other)))));
+      this._panelResizers?.[which]?.setAttribute?.('aria-valuenow', String(Math.round(w)));
+      this._panelResizers?.[which]?.setAttribute?.('aria-valuemax', String(Math.round(Math.max(lo, Math.min(hi, room - other)))));
     }
     if (changed && relayout) {
       this.ctx.playerView.relayout?.();

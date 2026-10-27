@@ -239,7 +239,8 @@ export function createTopbar(ctx) {
     else if (s === 'error') statusText = status.textContent = "Couldn't save. Retrying...";
     else if (s === 'pending') statusText = status.textContent = 'Unsaved changes';
     else {
-      const where = 'Saved locally';
+      const local = ctx.library?.backend?.kind === 'local';
+      const where = local ? 'Saved locally' : 'Auto saved';
       statusText = `${where}: ${fmt(at)}`;
       status.replaceChildren(h('span.save-status-long', `${where}: `), h('span.save-status-short', { 'aria-hidden': 'true' }, 'Saved '), fmt(at));
     }

@@ -77,8 +77,8 @@ describe('tooltip shortcuts', () => {
       commands.setLayout('track');
       expect(commands.keyFor('split')).not.toBe('Mod+B');
       expect(tipFor(split)).toBe(shortcutLabel(commands.keyFor('split')));
-      commands.setKeys('assistant', ['Mod+Shift+J']);
-      expect(tipFor(root.querySelector('.ai-btn'))).toBe(shortcutLabel('Mod+Shift+J'));
+      commands.setKeys('export', ['Mod+Shift+E']);
+      expect(tipFor(exportBtn)).toBe(shortcutLabel('Mod+Shift+E'));
     } finally {
       commands.setLayout('default', { keepCustom: false });
       editor.dispose();
