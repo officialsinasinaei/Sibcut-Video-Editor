@@ -1,0 +1,85 @@
+{
+  "name": "video-studio",
+  "version": "1.0.0",
+  "description": "Video Studio: a multi-track video editor on Puter. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored in your own cloud.",
+  "type": "module",
+  "private": true,
+  "author": "Video Studio",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "main": "electron-main.cjs",
+  "scripts": {
+    "dev": "npm run build:worker && vite",
+    "build": "npm run build:worker && vite build",
+    "build:worker": "vite build --config vite.worker.config.js",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:wasm": "node tools/build-wasm.mjs",
+    "check:licenses": "node tools/check-licenses.mjs",
+    "prebuild": "npm run check:licenses",
+    "build:electron": "npm run build:worker && vite build --config vite.electron.config.js",
+    "electron:dev": "npm run build:electron && electron .",
+    "electron:pack": "npm run build:electron && electron-builder --win portable"
+  },
+  "dependencies": {
+    "@fontsource/anton": "5.3.0",
+    "@fontsource/bebas-neue": "5.3.0",
+    "@fontsource/dancing-script": "5.3.0",
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/lobster": "5.3.0",
+    "@fontsource/merriweather": "5.3.0",
+    "@fontsource/montserrat": "5.3.0",
+    "@fontsource/oswald": "5.3.0",
+    "@fontsource/pacifico": "5.3.0",
+    "@fontsource/permanent-marker": "5.3.0",
+    "@fontsource/playfair-display": "5.3.0",
+    "@fontsource/poppins": "5.3.0",
+    "@fontsource/roboto-mono": "5.3.0",
+    "@mediapipe/tasks-vision": "1.0.1",
+    "lucide": "1.54.0",
+    "mediabunny": "1.61.3"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "electron": "36.4.0",
+    "electron-builder": "26.0.12",
+    "jsdom": "30.1.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  },
+  "build": {
+    "appId": "com.puter.videostudio",
+    "productName": "Video Studio",
+    "copyright": "Copyright © 2026 Puter Technologies Inc.",
+    "asar": true,
+    "files": [
+      "dist/**",
+      "electron-main.cjs",
+      "updater.cjs",
+      "updater-ui.html",
+      "build/icon.*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "VideoStudio-Portable.exe"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "electronVersion": "36.4.0"
+  }
+}

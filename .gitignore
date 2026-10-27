@@ -1,0 +1,9 @@
+.dev-media
+dist
+node_modules
+wasm/target
+public/worker
+release
+*.exe
+VideoStudio-Portable.exe
+build/icon.ico

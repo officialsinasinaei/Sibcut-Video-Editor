@@ -1,0 +1,301 @@
+'use strict';
+
+/**
+ * Video Studio – Electron main process
+ *
+ * Strategy
+ * --------
+ * 1. Serve the Vite-built `dist/` folder via a tiny local HTTP server on a
+ *    random loopback port.  A real HTTP origin is required so that:
+ *      • SharedArrayBuffer (WASM SIMD, audio DSP) works (COOP+COEP headers)
+ *      • Web Workers with ES-module format load correctly
+ *      • OPFS (Origin Private File System) is available for project storage
+ *      • fetch() inside the app resolves relative URLs correctly
+ *
+ * 2. The server injects Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy
+ *    headers on every response so SharedArrayBuffer is always available.
+ *
+ * 3. The Puter cloud CDN script (js.puter.com) is blocked before it loads, so
+ *    the app's boot() falls through to its built-in offline/local mode and
+ *    stores all projects in the browser's OPFS – no account required, fully
+ *    portable and private.
+ *
+ * 4. Native menus, keyboard shortcuts, a "Save before quit" guard, and a
+ *    persistent window-bounds preference make it feel like a real desktop app.
+ */
+
+const { app, BrowserWindow, Menu, shell, session, dialog, ipcMain } = require('electron');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { checkForUpdates, setupUpdaterIPC } = require('./updater.cjs');
+
+// ─── Paths ────────────────────────────────────────────────────────────────────
+const DIST = path.join(__dirname, 'dist');
+const ICON = path.join(__dirname, 'build', 'icon.png');
+
+// ─── MIME types ───────────────────────────────────────────────────────────────
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript',
+  '.mjs':  'application/javascript',
+  '.css':  'text/css',
+  '.json': 'application/json',
+  '.wasm': 'application/wasm',
+  '.png':  'image/png',
+  '.ico':  'image/x-icon',
+  '.svg':  'image/svg+xml',
+  '.webp': 'image/webp',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.mp4':  'video/mp4',
+  '.webm': 'video/webm',
+  '.mp3':  'audio/mpeg',
+  '.wav':  'audio/wav',
+  '.ogg':  'audio/ogg',
+  '.tflite': 'application/octet-stream',
+  '.task': 'application/octet-stream',
+  '.zip':  'application/zip',
+  '.woff2': 'font/woff2',
+  '.woff':  'font/woff',
+  '.ttf':   'font/ttf',
+};
+
+// ─── Local file server ────────────────────────────────────────────────────────
+function startServer() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      // Strip query string and decode URI
+      let urlPath = req.url.split('?')[0];
+      try { urlPath = decodeURIComponent(urlPath); } catch {}
+
+      // Resolve to a real file, falling back to index.html for SPA routing
+      let filePath = path.join(DIST, urlPath);
+      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        if (!path.extname(urlPath)) {
+          filePath = path.join(DIST, 'index.html');
+        } else {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('File not found');
+          return;
+        }
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = MIME[ext] || 'application/octet-stream';
+
+      // Mandatory headers for SharedArrayBuffer & WASM SIMD
+      const headers = {
+        'Content-Type': mime,
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+      };
+
+      // Range support for video/audio seeking
+      const stat = fs.statSync(filePath);
+      const total = stat.size;
+      const rangeHeader = req.headers['range'];
+
+      if (rangeHeader && (mime.startsWith('video/') || mime.startsWith('audio/'))) {
+        const [, startStr, endStr] = /bytes=(\d*)-(\d*)/.exec(rangeHeader) || [];
+        const start = startStr ? parseInt(startStr, 10) : 0;
+        const end = endStr ? parseInt(endStr, 10) : total - 1;
+        const chunkSize = end - start + 1;
+        res.writeHead(206, {
+          ...headers,
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+        });
+        fs.createReadStream(filePath, { start, end }).pipe(res);
+      } else {
+        headers['Content-Length'] = total;
+        res.writeHead(200, headers);
+        fs.createReadStream(filePath).pipe(res);
+      }
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      resolve({ server, port: server.address().port });
+    });
+  });
+}
+
+// ─── Window state persistence ─────────────────────────────────────────────────
+const STATE_FILE = path.join(app.getPath('userData'), 'window-state.json');
+
+function loadWindowState() {
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch {
+    return { width: 1400, height: 900 };
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    const bounds = win.getBounds();
+    const maximized = win.isMaximized();
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ ...bounds, maximized }));
+  } catch {}
+}
+
+// ─── Main window ──────────────────────────────────────────────────────────────
+let mainWindow = null;
+let serverPort = null;
+
+async function createWindow() {
+  const state = loadWindowState();
+  const iconPath = fs.existsSync(ICON) ? ICON : undefined;
+
+  mainWindow = new BrowserWindow({
+    width:    state.width  || 1400,
+    height:   state.height || 900,
+    x:        state.x,
+    y:        state.y,
+    minWidth:  860,
+    minHeight: 560,
+    icon:      iconPath,
+    title:     'Video Studio',
+    backgroundColor: '#121214',   // matches the app's dark background – no white flash
+    autoHideMenuBar: false,
+    show: false,                   // show only when ready to avoid a blank flicker
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      // Allow the origin to use SharedArrayBuffer (already enforced by headers)
+      // and the MediaPipe WASM models to fetch from the same origin.
+    },
+  });
+
+  // Restore maximized state
+  if (state.maximized) mainWindow.maximize();
+
+  // Block the Puter cloud SDK so the app uses local OPFS storage automatically
+  // (the app's boot() falls through to startLocal() when puter is undefined)
+  mainWindow.webContents.session.webRequest.onBeforeRequest(
+    { urls: ['https://js.puter.com/*', 'https://*.puter.com/*'] },
+    (details, callback) => callback({ cancel: true })
+  );
+
+  // Open external links in the default browser, not inside Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    // Only allow navigation within our local server origin
+    if (!url.startsWith(`http://127.0.0.1:${serverPort}`)) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  // Show the window once the page has rendered (avoids white flash)
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+
+  // Persist window bounds on close / resize / move
+  const persistState = () => saveWindowState(mainWindow);
+  mainWindow.on('resize', persistState);
+  mainWindow.on('move',   persistState);
+  mainWindow.on('close',  persistState);
+
+  mainWindow.on('closed', () => { mainWindow = null; });
+
+  await mainWindow.loadURL(`http://127.0.0.1:${serverPort}/`);
+}
+
+// ─── Application menu ─────────────────────────────────────────────────────────
+function buildMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        isMac ? { role: 'close' } : { role: 'quit', label: 'Exit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { role: 'toggleDevTools', label: 'Developer Tools' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Check for Updates...',
+          click: () => checkForUpdates(mainWindow, true),
+        },
+        { type: 'separator' },
+        {
+          label: 'About Video Studio',
+          click: () => dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'About Video Studio',
+            message: 'Video Studio',
+            detail: `Version: v${app.getVersion()}\nA multi-track video editor.\nProjects are stored locally on this device.\n\nBuilt with Electron + Vite.`,
+            buttons: ['OK'],
+          }),
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// ─── App lifecycle ────────────────────────────────────────────────────────────
+app.whenReady().then(async () => {
+  // Enable hardware acceleration (default) + high-quality video decoding
+  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder');
+
+  // Initialize updater IPC handlers
+  setupUpdaterIPC();
+
+  const { port } = await startServer();
+  serverPort = port;
+
+  buildMenu();
+  await createWindow();
+
+  // Quietly check for updates 4 seconds after launch
+  setTimeout(() => {
+    checkForUpdates(mainWindow, false);
+  }, 4000);
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', () => {
+  // On macOS it is conventional to keep the app running until Cmd+Q
+  if (process.platform !== 'darwin') app.quit();
+});
