@@ -10,9 +10,11 @@ import { valueAt } from './keyframes.js';
 export const TEXT_CASES = ['none', 'upper', 'lower', 'title'];
 export const V_ALIGNS = ['top', 'middle', 'bottom'];
 export const FILL_TYPES = ['solid', 'linear', 'split'];
+export const DIRECTIONS = ['auto', 'rtl', 'ltr'];
 
 /** Defaults for the added fields. Every value is neutral: an old clip looks the same. */
 export const TEXT_STYLE_EXTRAS = Object.freeze({
+  direction: 'auto',
   case: 'none',
   vAlign: 'middle',
   boxWidth: 0, // project px; 0 = the box hugs the text (no wrapping)
@@ -54,6 +56,7 @@ export function normTextExtras(raw) {
   const s = raw && typeof raw === 'object' ? raw : {};
   const d = TEXT_STYLE_EXTRAS;
   return {
+    direction: oneOf(s.direction, DIRECTIONS, d.direction),
     // Older projects stored an uppercase switch.
     case: oneOf(s.case, TEXT_CASES, s.uppercase ? 'upper' : d.case),
     vAlign: oneOf(s.vAlign, V_ALIGNS, d.vAlign),

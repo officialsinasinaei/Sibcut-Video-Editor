@@ -305,6 +305,17 @@ export const FONTS = [
   { id: 'Dancing Script', label: 'Dancing Script', css: "'Dancing Script', cursive" },
   { id: 'Permanent Marker', label: 'Permanent Marker', css: "'Permanent Marker', cursive" },
   { id: 'Roboto Mono', label: 'Roboto Mono', css: "'Roboto Mono', monospace" },
+  // 10 Best Persian / Farsi Fonts (SIL OFL)
+  { id: 'Vazirmatn', label: 'Vazirmatn (وزیرمتن)', css: "'Vazirmatn', system-ui, sans-serif" },
+  { id: 'Sahel', label: 'Sahel (ساحل)', css: "'Sahel', 'Vazirmatn', sans-serif" },
+  { id: 'Shabnam', label: 'Shabnam (شبنم)', css: "'Shabnam', 'Vazirmatn', sans-serif" },
+  { id: 'Samim', label: 'Samim (صمیم)', css: "'Samim', 'Vazirmatn', sans-serif" },
+  { id: 'Tanha', label: 'Tanha (تنها)', css: "'Tanha', 'Vazirmatn', sans-serif" },
+  { id: 'Parastoo', label: 'Parastoo (پرستو)', css: "'Parastoo', 'Vazirmatn', serif" },
+  { id: 'Gandom', label: 'Gandom (گندم)', css: "'Gandom', 'Vazirmatn', serif" },
+  { id: 'Estedad', label: 'Estedad (استعداد)', css: "'Estedad', 'Vazirmatn', sans-serif" },
+  { id: 'Lalezar', label: 'Lalezar (لاله‌زار)', css: "'Lalezar', 'Vazirmatn', cursive, display" },
+  { id: 'Amiri', label: 'Amiri (امیری)', css: "'Amiri', 'Vazirmatn', serif" },
 ];
 
 /** Text presets shown in the Text panel; values override DEFAULT_TEXT_STYLE. */

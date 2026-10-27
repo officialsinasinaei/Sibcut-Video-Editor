@@ -1,3 +1,4 @@
+import { isRTL, PERSIAN_SCRAMBLE } from './rtl-shaper.js';
 /**
  * Text animations that move letters or words individually. scene.js turns a
  * clip's in/out/loop animation into entries { id, phase, p } (p = 0..1
@@ -35,6 +36,9 @@ const LOWER = 'abcdefghijklmnopqrstuvwxyz0123456789#%&*+<>?';
 
 /** A stand-in character for the decoder effect. */
 export function scrambleChar(ch, i, step) {
+  if (isRTL(ch)) {
+    return PERSIAN_SCRAMBLE[Math.floor(hash01(i + 1, step + 7) * PERSIAN_SCRAMBLE.length)];
+  }
   const set = ch === ch.toLowerCase() && ch !== ch.toUpperCase() ? LOWER : UPPER;
   return set[Math.floor(hash01(i + 1, step + 7) * set.length)];
 }

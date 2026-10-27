@@ -42,7 +42,7 @@ const DEF = DEFAULT_TEXT_STYLE;
 /** Text box bound to clip.text; typing merges into one undo step per pause. */
 function textBox(view) {
   const id = uidFor('text');
-  const ta = h('textarea.textarea.insp-textarea', { id, rows: 3, spellcheck: true });
+  const ta = h('textarea.textarea.insp-textarea', { id, rows: 3, spellcheck: true, dir: 'auto' });
   ta.value = view.clip.text;
   ta.addEventListener('input', () => {
     view.edit('Edit text', (c) => {

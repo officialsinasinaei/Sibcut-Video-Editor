@@ -34,3 +34,18 @@ import '@fontsource/roboto-mono/400.css';
 import '@fontsource/roboto-mono/400-italic.css';
 import '@fontsource/roboto-mono/700.css';
 import '@fontsource/roboto-mono/700-italic.css';
+
+// 10 Best Farsi / Persian Fonts (SIL OFL)
+import '@fontsource/vazirmatn/400.css';
+import '@fontsource/vazirmatn/700.css';
+import 'sahel-font/dist/font-face.css';
+import 'shabnam-font/dist/font-face.css';
+import 'samim-font/dist/font-face.css';
+import 'tanha-font/dist/font-face.css';
+import 'parastoo-font/dist/font-face.css';
+import 'gandom-font/dist/font-face.css';
+import '@fontsource/estedad/400.css';
+import '@fontsource/estedad/700.css';
+import '@fontsource/lalezar/400.css';
+import '@fontsource/amiri/400.css';
+import '@fontsource/amiri/700.css';

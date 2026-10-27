@@ -127,6 +127,7 @@ export const DEFAULT_TEXT_STYLE = Object.freeze({
   italic: false,
   underline: false,
   align: 'center',
+  direction: 'auto',
   letterSpacing: 0,
   lineHeight: 1.2,
   strokeColor: '#000000',

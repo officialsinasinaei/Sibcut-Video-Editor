@@ -1,3 +1,4 @@
+import { isRTL, layoutRtlLine } from './rtl-shaper.js';
 /**
  * Text layout math shared by the renderer: word wrapping to a box width,
  * per-glyph positions within a line, and bending lines around a circle
@@ -53,6 +54,9 @@ export function wrapLines(text, maxW, measure) {
  *  measurePlain(ch)    width of a single glyph without spacing
  */
 export function lineGlyphs(line, measureSpaced, measurePlain) {
+  if (isRTL(line)) {
+    return layoutRtlLine(line, measureSpaced, measurePlain);
+  }
   const chars = [...line];
   const out = [];
   let prev = 0;

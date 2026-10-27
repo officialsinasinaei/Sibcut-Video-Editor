@@ -1,3 +1,4 @@
+import { isRTL } from './rtl-shaper.js';
 /**
  * Text and sticker rasterization with Canvas 2D. The result is uploaded as a
  * texture by the compositor; entries are cached by content so a static title
@@ -113,6 +114,7 @@ function layoutText(clip, scale, opts = {}) {
     if (style.align === 'right') return contentW - widths[i];
     return (contentW - widths[i]) / 2;
   };
+  const isRtl = style.direction === 'rtl' || (style.direction !== 'ltr' && isRTL(text));
   const arc = style.arc || 0;
   // Highlighted words (model/text-marks.js) are drawn glyph by glyph in the highlight color.
   const marks = clip.marks?.length ? new Set(clip.marks) : null;
@@ -211,7 +213,7 @@ function layoutText(clip, scale, opts = {}) {
   const padY = Math.ceil(Math.max(deco, bgPad + 1, bub ? Math.max(bub.reach.t, bub.reach.b) + 1 : 0));
   const w = Math.min(8192, Math.ceil(contentW + padX * 2));
   const h = Math.min(8192, Math.ceil(contentH + padY * 2));
-  return { style, size, font, spacing, scale, lineH, runs, totals, contentW, contentH, padX, padY, bgPad, w, h, color: opts.color || style.color };
+  return { style, size, font, spacing, scale, lineH, runs, totals, contentW, contentH, padX, padY, bgPad, w, h, isRtl, color: opts.color || style.color };
 }
 
 /** Run each visible run with ctx transformed so (x, y) is where its text starts. */
