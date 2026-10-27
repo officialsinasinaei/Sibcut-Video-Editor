@@ -76,8 +76,8 @@ export function friendlyAiError(error, { firstMessage = false } = {}) {
   const code = String(error?.code || '');
   if (tooLongForAi(error)) return firstMessage ? 'This message is too long for the AI. Shorten it.' : 'This chat has grown too long for the AI. Start a new chat to carry on.';
   if (/rate.?limit|too many requests|\b429\b|overloaded|try again later/i.test(`${text} ${code}`)) return 'The AI service is busy. Wait a moment, then try again.';
-  if (/insufficient.?(funds|credit|balance)|out of credit|quota|usage.?limit|allowance|billing|payment required|\b402\b/i.test(`${text} ${code}`)) return 'Your Puter AI allowance has run out for now.';
-  if (/sign.?in|not signed|unauthori[sz]ed|\b401\b|auth(entication)? (required|failed)/i.test(`${text} ${code}`)) return 'Sign in to Puter to use the assistant.';
+  if (/insufficient.?(funds|credit|balance)|out of credit|quota|usage.?limit|allowance|billing|payment required|\b402\b/i.test(`${text} ${code}`)) return 'Your AI allowance has run out for now.';
+  if (/sign.?in|not signed|unauthori[sz]ed|\b401\b|auth(entication)? (required|failed)/i.test(`${text} ${code}`)) return 'Sign in to use the assistant.';
   if (/network|failed to fetch|offline|timed? ?out|took too long|deadline exceeded|context canceled|ECONN|connection/i.test(text)) return 'The AI service could not be reached. Check your connection.';
   return text ? `The AI service said: ${text.slice(0, 300)}` : 'The AI service did not answer.';
 }

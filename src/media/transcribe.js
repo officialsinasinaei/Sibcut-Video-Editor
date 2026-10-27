@@ -1,6 +1,6 @@
 /**
- * Captions from speech: mix the project's speech to 16 kHz mono, send it to Puter
- * speech to text, and turn the timed words into caption cues. Also reads
+ * Captions from speech: mix the project's speech to 16 kHz mono,
+ * and turn the timed words into caption cues. Also reads
  * and writes .srt / .vtt subtitle files.
  *
  * Cue times in this module are seconds; buildCaptionClips converts them to
@@ -470,10 +470,10 @@ export function splitForTranscription(samples, sampleRate, maxSeconds = CHUNK_SE
 // ---- Speech to text -----------------------------------------------------------
 
 export function puterAvailable() {
-  return typeof puter !== 'undefined' && Boolean(puter.ai?.speech2txt);
+  return false;
 }
 
-/** A readable message from whatever a failed Puter call threw. */
+/** A readable error message from whatever a failed call threw. */
 export function errorMessage(err, fallback = 'Something went wrong.') {
   if (!err) return fallback;
   if (typeof err === 'string') return err;

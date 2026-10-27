@@ -1,7 +1,6 @@
 /**
- * Media tab: the project's media bin. Import local files or files from
- * Puter, record the camera or screen, generate pictures with AI, organize
- * media in folders, browse as a grid or a list (sorted and filtered, both
+ * Media tab: the project's media bin. Import local files, record the camera or screen,
+ * organize media in folders, browse as a grid or a list (sorted and filtered, both
  * remembered per device), select several items and add them to the
  * timeline in order. Also offers backdrops generated on the fly.
  */
@@ -104,22 +103,6 @@ export function mediaTab(ctx) {
     }
   }
 
-  async function fromPuter() {
-    if (typeof puter === 'undefined' || !puter.ui?.showOpenFilePicker) return;
-    try {
-      const picked = await puter.ui.showOpenFilePicker({ multiple: true, accept: ['video/*', 'audio/*', 'image/*'] });
-      const items = Array.isArray(picked) ? picked : [picked];
-      const files = [];
-      for (const it of items) {
-        const blob = await it.read();
-        files.push(new File([blob], it.name, { type: blob.type }));
-      }
-      if (files.length) await importWithProgress(files);
-    } catch (err) {
-      if (err) toast("Couldn't open that file from Puter.", { kind: 'error' });
-    }
-  }
-
   /* Toolbar ------------------------------------------------------------------ */
   const importBtn = h('button.btn.primary.import-btn', { type: 'button' }, icon('import', 16), 'Import');
   importBtn.addEventListener('click', () => fileInput.click());
@@ -130,10 +113,6 @@ export function mediaTab(ctx) {
   ], { label: 'Record' });
   const folderBtn = h('button.icon-btn', { type: 'button', 'aria-label': 'New folder', 'data-tip': 'New folder' }, icon('folderPlus', 18));
   folderBtn.addEventListener('click', () => newFolder());
-  const puterBtn = typeof puter !== 'undefined' && ctx.library.backend.kind === 'puter'
-    ? h('button.icon-btn', { type: 'button', 'aria-label': 'Import from Puter', 'data-tip': 'Import from Puter' }, icon('cloud', 18))
-    : null;
-  puterBtn?.addEventListener('click', fromPuter);
 
   const viewBtn = h('button.icon-btn.media-view-btn', { type: 'button' });
   const syncViewBtn = () => {
@@ -703,7 +682,7 @@ export function mediaTab(ctx) {
       { id: 'generate', label: 'Generate', icon: 'magic' },
       { id: 'backdrops', label: 'Backdrops' },
     ],
-    topbar: [importBtn, recordBtn, folderBtn, puterBtn, fileInput],
+    topbar: [importBtn, recordBtn, folderBtn, fileInput],
     toolbar: viewBtn,
     menu: sortMenu,
     menuLabel: 'Sort and filter',

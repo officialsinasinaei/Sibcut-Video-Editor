@@ -1,5 +1,5 @@
 /**
- * Captions tab: captions generated from speech (Puter speech to text),
+ * Captions tab: captions generated from speech,
  * lyrics from a song, an editable list of the project's captions, and
  * .srt / .vtt import and .srt export. Captions are text clips marked
  * caption: true.
@@ -174,15 +174,14 @@ function stepProgress(steps, label) {
   return { el, cancel, setStep };
 }
 
-/** Sign-in prompt for the AI caption tools when signed out. */
+/** Offline state for the AI caption tools. */
 function signInState(ctx, title, text) {
-  const btn = ctx.account?.onSignIn ? h('button.btn.primary', { type: 'button', onclick: () => ctx.account.onSignIn() }, icon('cloud', 16), 'Sign in to Puter') : null;
-  return { el: emptyState('user', title, text, btn), sync() {} };
+  return { el: emptyState('captions', title, text), sync() {} };
 }
 
 function autoPanel(ctx, opts, save) {
   const { store } = ctx;
-  if (!aiAvailable(ctx)) return signInState(ctx, 'Sign in to generate captions', 'Generated captions turn speech into text with Puter AI, so they need a Puter account. You can still import subtitle files or add captions by hand.');
+  if (!aiAvailable(ctx)) return signInState(ctx, 'Automatic captions unavailable', 'Speech-to-text transcription requires online cloud services and is not available in local desktop mode. You can still import subtitle files or add captions by hand.');
   const lang = selectField({ label: 'Spoken language', options: LANGUAGES, value: opts.language, onChange: (v) => { opts.language = v; save(); } });
   const scope = segmented({
     label: 'Listen to',
@@ -268,7 +267,7 @@ function songLabel(clip, asset) {
  */
 function lyricsPanel(ctx, opts, save) {
   const { store } = ctx;
-  if (!aiAvailable(ctx)) return signInState(ctx, 'Sign in to create lyrics', 'Lyrics are heard with Puter AI speech to text, so they need a Puter account. You can still import a lyrics subtitle file or type lines in the Captions list.');
+  if (!aiAvailable(ctx)) return signInState(ctx, 'Lyrics detection unavailable', 'Automatic lyrics transcription requires online cloud services and is not available in local desktop mode. You can still import a lyrics subtitle file or type lines in the Captions list.');
   const song = h('select.select', { id: `lyr-song-${uid('x')}` });
   song.addEventListener('change', () => syncButton());
   const songField = h('div.field', h('label.field-label', { for: song.id }, 'Song'), song);
@@ -675,7 +674,7 @@ function openTranslate(ctx) {
   const status = h('p.asset-hint', { role: 'status' });
   const go = h('button.btn.primary', { type: 'button' }, icon('languages', 16), 'Translate');
   const cancel = h('button.btn', { type: 'button' }, 'Cancel');
-  const d = openDialog({ title: 'Translate captions', body: h('div.cap-form', h('p.dialog-text', `${clips.length} caption${clips.length === 1 ? '' : 's'} will be translated with Puter AI.`), lang.el, h('div.field', h('span.field-label', 'Put the translation'), how.el), status), actions: [cancel, go], className: 'small' });
+  const d = openDialog({ title: 'Translate captions', body: h('div.cap-form', h('p.dialog-text', `${clips.length} caption${clips.length === 1 ? '' : 's'} will be translated.`), lang.el, h('div.field', h('span.field-label', 'Put the translation'), how.el), status), actions: [cancel, go], className: 'small' });
   let abort = null;
   cancel.addEventListener('click', () => {
     abort?.abort();

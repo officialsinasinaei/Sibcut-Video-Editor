@@ -228,7 +228,7 @@ export function videoErrorMessage(err) {
   const code = String(err?.code || err?.error?.code || '');
   const why = String(err?.errorCode || err?.error?.errorCode || '');
   if (why === 'moderation_flagged' || code === 'moderation_flagged') return 'The request was declined by the content filter. Try a different description or picture.';
-  if (code === 'insufficient_funds') return 'Your Puter balance is too low to make this video. A shorter clip may fit.';
+  if (code === 'insufficient_funds') return 'Insufficient credits to make this video. A shorter clip may fit.';
   if (code === 'upstream_timeout') return 'The video took too long to make. Try again, or ask for a shorter clip.';
   if (code === 'upstream_failed') return 'The video service could not make this clip. Try again.';
   if (code === 'prompt_required') return 'Describe the video first.';
@@ -296,7 +296,7 @@ let tempSeq = 0;
 const tempPath = () => `video-studio/.ai-temp/${Date.now().toString(36)}-${(++tempSeq).toString(36)}.mp4`;
 
 const defaultTxt2vid = (options) => {
-  if (typeof puter === 'undefined' || !puter.ai?.txt2vid) throw new Error('Video generation needs Puter.');
+  if (typeof puter === 'undefined' || !puter.ai?.txt2vid) throw new Error('Video generation requires cloud services.');
   return puter.ai.txt2vid(options);
 };
 const defaultFs = () => (typeof puter !== 'undefined' ? puter.fs : null);

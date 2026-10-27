@@ -2,8 +2,6 @@
  * Speech tab for text clips: read the clip's text aloud with a chosen
  * voice, preview it, and add it as an audio clip that starts with the text
  * clip (optionally stretching the text clip to the speech's length).
- * Speech runs on Puter AI, so signed-out users see the same sign-in prompt
- * as the Audio panel.
  */
 import { h, announce } from '../../lib/dom.js';
 import { icon } from '../../lib/icons.js';
@@ -17,8 +15,7 @@ import { emptyState } from '../panels/common.js';
 import { propSection, toggle } from './common.js';
 
 function signInHint(ctx) {
-  const btn = ctx.account?.onSignIn ? h('button.btn.primary', { type: 'button', onclick: () => ctx.account.onSignIn() }, icon('cloud', 16), 'Sign in to Puter') : null;
-  return h('div.text-speech', emptyState('user', 'Sign in to use text to speech', 'Text to speech runs on Puter AI, so it needs a Puter account.', btn));
+  return h('div.text-speech', emptyState('mic', 'Text to speech unavailable', 'Text-to-speech voice generation requires online cloud services and is not available in local desktop mode.'));
 }
 
 // Whether "Add as audio clip" also fits the text clip to the speech.

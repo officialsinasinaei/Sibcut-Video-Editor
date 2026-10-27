@@ -1,7 +1,7 @@
 {
   "name": "video-studio",
   "version": "1.0.0",
-  "description": "Video Studio: a multi-track video editor on Puter. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored in your own cloud.",
+  "description": "Video Studio: a multi-track video editor. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored locally on your device.",
   "type": "module",
   "private": true,
   "author": "Video Studio",
@@ -51,9 +51,9 @@
     "vitest": "5.0.3"
   },
   "build": {
-    "appId": "com.puter.videostudio",
+    "appId": "com.videostudio.app",
     "productName": "Video Studio",
-    "copyright": "Copyright © 2026 Puter Technologies Inc.",
+    "copyright": "Copyright © 2026 Video Studio",
     "asar": true,
     "files": [
       "dist/**",

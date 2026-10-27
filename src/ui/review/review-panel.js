@@ -135,9 +135,7 @@ export function createReviewPanel(ctx, { deps = {} } = {}) {
 
   async function open() {
     if (!reviewAvailable(ctx)) {
-      const signIn = ctx.account?.onSignIn ? h('button.btn.small', { type: 'button' }, 'Sign in to Puter') : null;
-      signIn?.addEventListener('click', () => ctx.account.onSignIn());
-      message('Review comments need a Puter account.', signIn);
+      message('Online review comments are not available in local desktop mode.');
       return;
     }
     message('Loading review comments...');

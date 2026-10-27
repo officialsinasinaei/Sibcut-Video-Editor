@@ -246,8 +246,8 @@ export function describeCall(name, args = {}, { videoModel = null, seconds } = {
       const want = Number.isFinite(num(a.seconds)) ? num(a.seconds) : Number.isFinite(seconds) ? seconds : name === 'generate_transition' ? shortest : undefined;
       const len = fitSeconds(model, want);
       const bits = [`with ${model.label}${fallback ? ' (the chosen model can\'t start from a picture)' : ''}`, len ? `${len}s long` : 'at the length the model picks', a.aspect].filter(Boolean).join(', ');
-      parts.push(`Made ${bits}. About ${formatCents(estimateCents(model, want))} in Puter credits.`);
-    } else parts.push('Uses Puter credits.');
+      parts.push(`Made ${bits}. About ${formatCents(estimateCents(model, want))} in credits.`);
+    } else parts.push('Uses credits.');
     out.detail = parts.filter(Boolean).join(' ');
   } else if (prompt) out.detail = `"${String(prompt).slice(0, 600)}"`;
   else if (name === 'add_voiceover' && a.text) out.detail = `"${String(a.text).slice(0, 600)}"`;

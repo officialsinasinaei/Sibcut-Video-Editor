@@ -46,7 +46,7 @@ export function aspectForSize(width, height) {
  * no model and lets Puter choose (GPT Image 2). options go with each request.
  */
 export const IMAGE_MODELS = [
-  { id: 'default', label: 'GPT Image 2', hint: "Puter's default", model: null },
+  { id: 'default', label: 'GPT Image 2', hint: 'Default', model: null },
   { id: 'gpt-image-2.5', label: 'GPT Image 2.5', hint: 'Newest from OpenAI', model: 'gpt-image-2.5-sunburst', options: { quality: 'medium' } },
   { id: 'gemini-3-pro', label: 'Gemini 3 Pro Image', hint: 'Detailed, good with text', model: 'gemini-3-pro-image' },
   { id: 'nano-banana-2.1', label: 'Nano Banana 2.1', hint: 'Fast, strong at edits', model: 'gemini-nano-banana-2.1' },
@@ -71,7 +71,7 @@ export function txt2imgOptions(aspectId, { testMode = false, model = DEFAULT_IMA
 export function imageErrorMessage(err) {
   const code = String(err?.code || err?.error?.code || '');
   if (code === 'moderation_flagged') return 'The request was declined by the content filter. Try a different description.';
-  if (code === 'insufficient_funds') return 'Your Puter balance is too low to create a picture.';
+  if (code === 'insufficient_funds') return 'Insufficient credits to create a picture.';
   if (code === 'network_error' || code === 'request_timeout' || err instanceof TypeError) return 'The AI service could not be reached. Check your connection and try again.';
   return errorMessage(err, "Couldn't create the picture. Try again.");
 }
@@ -145,7 +145,7 @@ export async function cropToAspect(blob, w, h) {
 export async function generateImage(text, { aspect = '16:9', style = 'none', model = DEFAULT_IMAGE_MODEL, testMode = false } = {}) {
   const prompt = buildPrompt(text, style);
   if (!prompt) throw new Error('Describe the picture first.');
-  if (typeof puter === 'undefined' || !puter.ai?.txt2img) throw new Error('Picture generation needs Puter.');
+  if (typeof puter === 'undefined' || !puter.ai?.txt2img) throw new Error('Picture generation requires cloud services.');
   let result;
   try {
     result = await puter.ai.txt2img(prompt, txt2imgOptions(aspect, { testMode, model }));

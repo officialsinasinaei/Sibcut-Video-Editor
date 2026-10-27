@@ -31,8 +31,6 @@ export const KEY_LAYOUTS = [
       splitTool: ['C'],
       split: ['Mod+K'],
       splitAll: ['Mod+Shift+K'],
-      // Mod+K is the edit here, so the AI assistant moves over.
-      assistant: ['Mod+Alt+K'],
       toggleDisabled: ['Shift+E'],
       shuttleBack: ['J'],
       shuttleStop: ['K'],

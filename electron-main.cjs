@@ -15,10 +15,8 @@
  * 2. The server injects Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy
  *    headers on every response so SharedArrayBuffer is always available.
  *
- * 3. The Puter cloud CDN script (js.puter.com) is blocked before it loads, so
- *    the app's boot() falls through to its built-in offline/local mode and
- *    stores all projects in the browser's OPFS – no account required, fully
- *    portable and private.
+ * 3. Operates in pure offline/local mode and stores all projects in the
+ *    browser's OPFS – no account required, fully portable and private.
  *
  * 4. Native menus, keyboard shortcuts, a "Save before quit" guard, and a
  *    persistent window-bounds preference make it feel like a real desktop app.
@@ -174,8 +172,7 @@ async function createWindow() {
   // Restore maximized state
   if (state.maximized) mainWindow.maximize();
 
-  // Block the Puter cloud SDK so the app uses local OPFS storage automatically
-  // (the app's boot() falls through to startLocal() when puter is undefined)
+  // Block external cloud SDK calls so everything stays strictly local
   mainWindow.webContents.session.webRequest.onBeforeRequest(
     { urls: ['https://js.puter.com/*', 'https://*.puter.com/*'] },
     (details, callback) => callback({ cancel: true })

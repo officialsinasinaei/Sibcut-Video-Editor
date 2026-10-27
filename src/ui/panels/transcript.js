@@ -108,7 +108,6 @@ export function transcriptPanel(ctx, opts, save, { onCaptions } = {}) {
     }
   }
 
-  const signIn = ctx.account?.onSignIn ? h('button.btn.primary', { type: 'button', onclick: () => ctx.account.onSignIn() }, icon('cloud', 16), 'Sign in to Puter') : null;
   const emptyEl = h('div.cap-form',
     h('p.asset-hint', 'Get the speech as text, then edit the video by editing the words: delete words to cut them, and remove filler words and long pauses in one click.'),
     lang.el,
@@ -116,7 +115,7 @@ export function transcriptPanel(ctx, opts, save, { onCaptions } = {}) {
     goBtn,
     h('div.cap-progress-foot', status, cancelBtn),
   );
-  const needAi = () => emptyState('user', 'Sign in to transcribe', 'Transcripts use Puter AI speech to text, so they need a Puter account.', signIn);
+  const needAi = () => emptyState('mic', 'Transcription unavailable', 'Automatic transcription requires online cloud services and is not available in local desktop mode.');
 
   // ---- Transcript view --------------------------------------------------------
   const search = h('input.input.small', { type: 'search', placeholder: 'Find words', 'aria-label': 'Find words in the transcript' });

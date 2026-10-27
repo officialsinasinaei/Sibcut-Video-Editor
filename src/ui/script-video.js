@@ -1,11 +1,11 @@
 /**
- * Script to video dialog: write or paste a script (or have Puter AI write
- * one), check the scenes and their picture descriptions, then generate a
+ * Script to video dialog: write or paste a script,
+ * check the scenes and their picture descriptions, then generate a
  * narrated video with pictures, captions and music. From the home screen it
  * becomes a new project; in the editor it is added at the playhead as one
  * undo step.
  *
- * Every AI call goes through `services` (see puterServices) so tests and
+ * Every AI call goes through `services` so tests and
  * browser checks can pass fakes.
  */
 import { h, announce } from '../lib/dom.js';
@@ -29,29 +29,23 @@ import {
 import '../styles/ai-create.css';
 
 /**
- * Puter AI can be used: signed in to Puter, or (development builds only) a
- * stand-in installed as globalThis.__vsAiStub for browser checks.
+ * AI readiness check.
  */
 export function aiReady(env) {
   return aiAvailable(env) || Boolean(import.meta.env.DEV && globalThis.__vsAiStub);
 }
 
-/** Explain that a tool needs a Puter account, with a sign-in button when possible. */
+/** Explain that a tool needs online AI services. */
 export function needAiDialog(account, what) {
   const close = h('button.btn', { type: 'button' }, 'Close');
-  const signIn = account?.onSignIn ? h('button.btn.primary', { type: 'button' }, icon('cloud', 16), 'Sign in to Puter') : null;
   const d = openDialog({
-    title: 'Sign in to use AI',
-    body: h('p.dialog-text', `${what} uses Puter AI, so it needs a Puter account. Sign in, then try again.`),
-    actions: [close, signIn].filter(Boolean),
+    title: 'AI Unavailable',
+    body: h('p.dialog-text', `${what} requires online cloud AI services and is not available in local desktop mode.`),
+    actions: [close],
     className: 'small',
     labelledBody: true,
   });
   close.addEventListener('click', () => d.close());
-  signIn?.addEventListener('click', () => {
-    d.close();
-    account.onSignIn();
-  });
   return d;
 }
 
@@ -80,7 +74,7 @@ async function heardWords(library, asset, { signal } = {}) {
 /** The real services: Puter AI for words, speech and pictures; media stored in the library. */
 export function puterServices(library) {
   return {
-    chat: (p) => puter.ai.chat(p),
+    chat: (p) => globalThis.puter?.ai?.chat?.(p),
     speech: (text, voice) => synthesize(text, voice),
     image: async (prompt, { aspect, style }) => (await generateImage(prompt, { aspect, style })).blob,
     words: (asset, blob, opts) => heardWords(library, asset, opts),

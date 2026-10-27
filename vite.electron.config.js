@@ -2,9 +2,7 @@ import { defineConfig } from 'vite';
 
 /**
  * Vite config for the Electron desktop build.
- * Same as vite.config.js but without the puter-localhost dev-server plugin
- * (that plugin only applies to `serve` anyway, but we avoid the import so
- * this config is fully self-contained and works without the monorepo sibling).
+ * Fully self-contained build with relative paths and ES module worker support.
  */
 export default defineConfig({
   base: './',

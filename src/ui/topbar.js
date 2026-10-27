@@ -26,21 +26,16 @@ export const LAYOUTS = [
   { id: 'vertical', label: 'Vertical video', icon: 'rect', leftW: 420, rightW: 400, upperH: 0.68 },
 ];
 
-/** Avatar button with the user's Puter profile picture when available. */
-export function accountButton({ user, picture, env, onSignOut, onSignIn, extraItems = [] }) {
+/** Avatar or settings button. */
+export function accountButton({ user, picture, extraItems = [] }) {
   const img = picture ? h('img.avatar-img', { src: picture, alt: '' }) : null;
   const initial = user?.username ? user.username[0].toUpperCase() : null;
-  const btn = h('button.avatar-btn', { type: 'button', 'aria-label': user ? `Account: ${user.username}` : 'Account', 'data-tip': user ? user.username : 'Account' }, img || (initial ? h('span.avatar-initial', initial) : icon('user', 16)));
+  const btn = h('button.avatar-btn', { type: 'button', 'aria-label': 'Settings', 'data-tip': 'Settings' }, img || (initial ? h('span.avatar-initial', initial) : icon('settings', 16)));
   menuButton(btn, () => [
-    user ? { heading: user.username } : { heading: 'Not signed in' },
+    { heading: 'Preferences' },
     ...extraItems,
     { label: 'Theme', icon: 'sun', submenu: themeMenuItems },
-    // Inside the Puter desktop the session belongs to Puter, so there is no sign out here.
-    user && env !== 'app' && onSignOut ? 'separator' : null,
-    user && env !== 'app' && onSignOut ? { label: 'Sign out', icon: 'logout', onSelect: onSignOut } : null,
-    !user && onSignIn ? 'separator' : null,
-    !user && onSignIn ? { label: 'Sign in to save to Puter', icon: 'cloud', onSelect: onSignIn } : null,
-  ].filter(Boolean), { align: 'end', label: 'Account' });
+  ].filter(Boolean), { align: 'end', label: 'Settings' });
   return btn;
 }
 
@@ -86,7 +81,6 @@ export function createTopbar(ctx) {
     cmd('import', { icon: 'import', label: 'Import media...' }),
     cmd('scriptToVideo', { icon: 'script', label: 'Script to video...' }),
     cmd('findHighlights', { icon: 'highlights', label: 'Find highlights...' }),
-    cmd('assistant', { icon: 'effects' }),
     cmd('export', { icon: 'export', label: 'Export...' }),
     cmd('shareReview', { icon: 'shareReview', label: 'Share for review...' }),
     cmd('reviewComments', { icon: 'comment', label: 'Review comments' }),
@@ -147,7 +141,6 @@ export function createTopbar(ctx) {
       cmd('multicam', { icon: 'multicam', label: 'Create multi-camera clip...' }),
       cmd('flattenMulticam', { icon: 'rows' }),
       'separator',
-      cmd('assistant', { icon: 'effects', checked: Boolean(ctx.assistant?.isOpen) }),
       cmd('splitScenes', { icon: 'scissors', label: 'Split at scene changes...' }),
       cmd('removeSilences', { icon: 'waveform', label: 'Remove silences...' }),
       cmd('syncBySound', { icon: 'waveform' }),
@@ -230,26 +223,23 @@ export function createTopbar(ctx) {
   const shareBtn = h('button.btn.share-btn', { type: 'button', 'data-tip': 'Share for review' }, icon('shareReview', 16), h('span', 'Share'));
   shareBtn.addEventListener('click', () => commands.run('shareReview'));
   const shortcutsBtn = h('button.icon-btn', { type: 'button', 'aria-label': 'Keyboard shortcuts', 'data-tip': 'Keyboard shortcuts' }, icon('keyboard', 18));
-  const aiBtn = h('button.icon-btn.ai-btn', { type: 'button', 'aria-label': 'AI assistant', 'aria-controls': 'ai-panel', 'data-tip': 'AI assistant', 'data-tip-cmd': 'assistant' }, icon('effects', 18));
-  aiBtn.addEventListener('click', () => commands.run('assistant'));
   shortcutsBtn.addEventListener('click', () => ctx.openShortcuts());
 
   const account = accountButton(ctx.account);
   const el = h('header.topbar', { role: 'banner' },
     h('div.topbar-left', menuBtn, menubar, status),
     h('div.topbar-center', nameBtn),
-    h('div.topbar-right', aiBtn, layoutBtn, shortcutsBtn, account, shareBtn, exportBtn),
+    h('div.topbar-right', layoutBtn, shortcutsBtn, account, shareBtn, exportBtn),
   );
 
   const fmt = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const setStatus = ({ status: s, at }) => {
-    const local = ctx.library.backend.kind === 'local';
     status.classList.toggle('error', s === 'error');
     if (s === 'saving') statusText = status.textContent = 'Saving...';
     else if (s === 'error') statusText = status.textContent = "Couldn't save. Retrying...";
     else if (s === 'pending') statusText = status.textContent = 'Unsaved changes';
     else {
-      const where = local ? 'Saved in this browser' : 'Auto saved';
+      const where = 'Saved locally';
       statusText = `${where}: ${fmt(at)}`;
       status.replaceChildren(h('span.save-status-long', `${where}: `), h('span.save-status-short', { 'aria-hidden': 'true' }, 'Saved '), fmt(at));
     }

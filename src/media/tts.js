@@ -1,7 +1,5 @@
 /**
- * Text to speech through Puter AI. The call returns an audio element; its
- * source is fetched into a Blob so the speech can be imported like any
- * other audio file and saved with the project.
+ * Text to speech synthesis.
  */
 import { errorMessage } from './transcribe.js';
 
@@ -17,9 +15,9 @@ export const TTS_VOICES = [
   })),
 ];
 
-/** Puter AI is present and the user is signed in (the project lives in Puter). */
+/** AI availability check (offline in standalone desktop mode). */
 export function aiAvailable(ctx) {
-  return typeof puter !== 'undefined' && Boolean(puter.ai) && ctx.library?.backend?.kind === 'puter';
+  return false;
 }
 
 const cache = new Map(); // `${voice}|${text}` -> Blob

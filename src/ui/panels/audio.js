@@ -335,8 +335,7 @@ function voiceoverPanel(ctx) {
 }
 
 function signInHint(ctx, what) {
-  const btn = ctx.account?.onSignIn ? h('button.btn.primary', { type: 'button', onclick: () => ctx.account.onSignIn() }, icon('cloud', 16), 'Sign in to Puter') : null;
-  return emptyState('user', `Sign in to use ${what}`, `${what[0].toUpperCase()}${what.slice(1)} runs on Puter AI, so it needs a Puter account.`, btn);
+  return emptyState('mic', `${what[0].toUpperCase()}${what.slice(1)} unavailable`, `${what[0].toUpperCase()}${what.slice(1)} requires online cloud AI services and is not available in local desktop mode.`);
 }
 
 /**

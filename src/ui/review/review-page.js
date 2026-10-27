@@ -55,7 +55,7 @@ export class ReviewPage {
   async start() {
     const { puter } = this;
     if (!puter) {
-      this.splash(h('h1.splash-title', 'Sign in needed'), h('p.splash-sub', 'Reviews open in Video Studio with a Puter account. Open this link where Puter is available.'));
+      this.splash(h('h1.splash-title', 'Reviews unavailable'), h('p.splash-sub', 'Online video reviews require cloud services and are not available in local desktop mode.'));
       return;
     }
     if (puter.env !== 'app' && !puter.auth.isSignedIn()) {

@@ -154,18 +154,9 @@ export class Home {
 
     this.nav = h('nav.home-nav', { 'aria-label': 'Home sections' });
     this.usageEl = h('p.storage-usage');
-    const backend = this.library.backend.kind;
-    const where = backend === 'puter'
-      ? [icon('cloudCheck', 16), 'Saved to your Puter cloud']
-      : backend === 'local'
-        ? [icon('drive', 16), 'Saved in this browser only']
-        : [icon('alert', 16), 'Not saved: temporary storage'];
-    const user = this.account?.user;
-    const signIn = !user && this.account?.onSignIn
-      ? h('button.btn.small.primary.block', { type: 'button', onclick: () => this.account.onSignIn() }, icon('cloud', 14), 'Sign in to save to Puter')
-      : null;
-    const accountRow = h('div.side-account', accountButton(this.account || {}), h('span.side-user', user?.username || 'Guest'));
-    const storage = h('div.side-storage', h('p.storage-where', ...where), this.usageEl, signIn);
+    const where = [icon('drive', 16), 'Saved locally on this device'];
+    const accountRow = h('div.side-account', accountButton(this.account || {}));
+    const storage = h('div.side-storage', h('p.storage-where', ...where), this.usageEl);
     this.side = h('aside.home-side',
       h('div.side-brand', appIcon(26), h('span.brand-name', 'Video Studio')),
       this.nav,
@@ -177,7 +168,6 @@ export class Home {
     this.mobileStorage = h('div.home-mobile-storage', h('p.storage-where', ...where.map((n) => (typeof n === 'string' ? n : n.cloneNode(true)))), h('p.storage-usage'));
     this.content = h('div.home-content');
     this.mainEl = h('main#main.home-main', { tabindex: '-1' }, this.content, this.mobileStorage,
-      h('footer.home-footer', h('a', { href: 'https://developer.puter.com', target: '_blank', rel: 'noopener' }, 'Powered by Puter')),
       this.importInput, this.bundleInput);
     this.dropHint = h('div.home-drop', { 'aria-hidden': 'true' }, h('div.home-drop-box', icon('import', 28), h('strong', 'Drop to start'), h('span', 'Media opens in a new project. Project files are added to your projects.')));
     const page = h('div.home', this.side, this.mainEl, this.dropHint);
@@ -579,38 +569,10 @@ export class Home {
     this.deliver(res);
   }
 
-  /** Download the file, or offer to save it to Puter when signed in. */
+  /** Download the exported project bundle file. */
   deliver({ blob, fileName }) {
-    const canSave = this.library.backend.kind === 'puter' && typeof puter !== 'undefined';
-    if (!canSave) {
-      downloadBlob(blob, fileName);
-      toast(`Downloaded ${fileName}`, { kind: 'success' });
-      return;
-    }
-    const status = h('p.dialog-text', { role: 'status' }, `${fileName} (${formatSize(blob.size)})`);
-    const dl = h('button.btn', { type: 'button' }, icon('download', 16), 'Download');
-    const save = h('button.btn.primary', { type: 'button' }, icon('cloud', 16), 'Save to Puter');
-    const d = openDialog({ title: 'Project file ready', body: status, actions: [dl, save], className: 'small' });
-    dl.addEventListener('click', () => {
-      downloadBlob(blob, fileName);
-      d.close();
-    });
-    save.addEventListener('click', async () => {
-      save.disabled = true;
-      try {
-        let item;
-        if (puter.ui?.showSaveFilePicker) item = await puter.ui.showSaveFilePicker(blob, fileName);
-        else {
-          const user = this.account?.user || (await puter.auth.getUser());
-          item = await puter.fs.write(`/${user.username}/Documents/${fileName}`, blob, { dedupeName: true, createMissingParents: true, overwrite: false });
-        }
-        toast(`Saved to ${item?.path || item?.name || 'Puter'}`, { kind: 'success' });
-        d.close();
-      } catch (err) {
-        toast(`Could not save to Puter: ${err?.message || err}`, { kind: 'error' });
-        save.disabled = false;
-      }
-    });
+    downloadBlob(blob, fileName);
+    toast(`Downloaded ${fileName}`, { kind: 'success' });
   }
 
   async importBundles(files) {

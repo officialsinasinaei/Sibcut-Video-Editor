@@ -9,7 +9,7 @@ import { h } from './lib/dom.js';
 import { icon, appIcon } from './lib/icons.js';
 import { applyTheme } from './ui/prefs.js';
 import { Library } from './storage/library.js';
-import { puterBackend, opfsBackend, opfsAvailable, memoryBackend } from './storage/backends.js';
+import { opfsBackend, opfsAvailable, memoryBackend } from './storage/backends.js';
 import { Home } from './ui/home.js';
 import { importProjectBundle } from './storage/bundle.js';
 import { toast, confirmDialog } from './ui/dialog.js';
@@ -127,46 +127,6 @@ async function openBundle(file) {
   }
 }
 
-async function profilePicture() {
-  try {
-    return await puter.auth.getProfilePicture();
-  } catch {
-    return null;
-  }
-}
-
-async function startSignedIn(env) {
-  loading('Loading your projects...');
-  let user = null;
-  try {
-    user = await puter.auth.getUser();
-  } catch {
-    /* the avatar falls back to an icon */
-  }
-  library = new Library(puterBackend(puter));
-  account = {
-    user,
-    env,
-    picture: await profilePicture(),
-    onSignOut: env === 'app' ? null : async () => {
-      if (!(await leavePage())) return;
-      await puter.auth.signOut();
-      location.hash = '';
-      location.reload();
-    },
-  };
-  watchWindowClose();
-  route();
-}
-
-/** Inside the Puter desktop: save (or ask) before the window closes, from any screen. */
-function watchWindowClose() {
-  if (typeof puter === 'undefined' || puter.env !== 'app' || !puter.ui?.onWindowClose) return;
-  puter.ui.onWindowClose(async () => {
-    if (await leavePage()) puter.exit();
-  });
-}
-
 /**
  * The page is about to go away: save the open project and wait for media
  * uploads, asking first when something couldn't be stored. Resolves false
@@ -185,22 +145,14 @@ async function leavePage() {
   return true;
 }
 
-function startLocal(env) {
+function startLocal() {
   library = new Library(opfsAvailable() ? opfsBackend() : memoryBackend());
   account = {
     user: null,
-    env,
+    env: 'local',
     picture: null,
-    onSignIn: typeof puter !== 'undefined' ? async () => {
-      try {
-        await puter.auth.signIn();
-        location.reload();
-      } catch {
-        /* closed */
-      }
-    } : null,
+    onSignIn: null,
   };
-  watchWindowClose();
   route();
 }
 
@@ -218,11 +170,9 @@ async function openReview(link) {
   loading('Opening review...');
   const { ReviewPage } = await import('./ui/review/review-page.js');
   view = new ReviewPage(root, {
-    puter: typeof puter !== 'undefined' ? puter : null,
     account,
     link,
     onHome: () => showHome(),
-    // Signing in changes which library and account the app uses, so start over.
     onSignedIn: () => location.reload(),
   });
 }
@@ -239,45 +189,10 @@ function route() {
   if (review) openReview(review);
   else if (m) openProject(decodeURIComponent(m[1]));
   else showHome();
-  // Files opened with the app from the Puter desktop start a new project.
-  if (typeof puter !== 'undefined' && puter.ui?.onLaunchedWithItems) {
-    puter.ui.onLaunchedWithItems(async (items) => {
-      const files = [];
-      for (const it of items || []) {
-        if (it.is_dir) continue;
-        try {
-          const blob = await puter.fs.read(it.path || it.uid);
-          files.push(new File([blob], it.name, { type: blob.type }));
-        } catch {
-          /* skip unreadable */
-        }
-      }
-      // Project files (exported from the home screen) open as projects.
-      const bundles = files.filter((f) => /\.zip$/i.test(f.name));
-      if (bundles.length) {
-        openBundle(bundles[0]);
-        return;
-      }
-      if (files.length) createProject({ ratio: 'original' }, files);
-    });
-  }
 }
 
 async function boot() {
-  if (import.meta.env.DEV && new URLSearchParams(location.search).has('local')) {
-    startLocal('web');
-    return;
-  }
-  // Wait briefly for the deferred Puter.js script.
-  for (let i = 0; i < 50 && typeof puter === 'undefined'; i++) await new Promise((r) => setTimeout(r, 100));
-  if (typeof puter === 'undefined') {
-    // Offline or blocked: still usable, saving in this browser.
-    startLocal('web');
-    return;
-  }
-  const env = puter.env;
-  if (env === 'app' || puter.auth.isSignedIn()) startSignedIn(env);
-  else startLocal(env);
+  startLocal();
 }
 
 // A review link pasted into an open tab only changes the hash.

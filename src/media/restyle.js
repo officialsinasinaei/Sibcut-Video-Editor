@@ -47,7 +47,7 @@ export async function blobToDataUri(blob) {
 }
 
 const defaultTxt2img = (prompt, options) => {
-  if (typeof puter === 'undefined' || !puter.ai?.txt2img) throw new Error('Restyling needs Puter.');
+  if (typeof puter === 'undefined' || !puter.ai?.txt2img) throw new Error('Restyling requires cloud services.');
   return puter.ai.txt2img(prompt, options);
 };
 

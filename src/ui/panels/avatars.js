@@ -1,9 +1,8 @@
 /**
  * Avatars tab: pick an original presenter, write or paste a script, choose
  * a voice, the framing, background and position, and add a talking avatar
- * clip with its voice. The voice comes from text to speech (Puter AI, so
- * signed-out users see the sign-in prompt) or from an audio clip already on
- * the timeline, which works on the device alone.
+ * clip with its voice. The voice comes from text to speech
+ * or from an audio clip already on the timeline, which works on the device alone.
  */
 import { h, announce } from '../../lib/dom.js';
 import { icon } from '../../lib/icons.js';
@@ -19,8 +18,7 @@ import { characterGrid, framingControl, backgroundControl, positionControl, avat
 import { tabLayout, emptyState } from './common.js';
 
 function signInHint(ctx) {
-  const btn = ctx.account?.onSignIn ? h('button.btn.small.primary', { type: 'button', onclick: () => ctx.account.onSignIn() }, icon('cloud', 14), 'Sign in to Puter') : null;
-  return h('div.avatar-signin', emptyState('user', 'Sign in for spoken scripts', 'Text to speech runs on Puter AI, so it needs a Puter account. You can still give an avatar the voice of an audio clip on the timeline.', btn));
+  return h('div.avatar-signin', emptyState('avatar', 'Spoken scripts unavailable', 'Text-to-speech avatar voices require online cloud AI services and are not available in local desktop mode. You can still give an avatar the voice of an audio clip on the timeline.'));
 }
 
 export function avatarsTab(ctx) {
