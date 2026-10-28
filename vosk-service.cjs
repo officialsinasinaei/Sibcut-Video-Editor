@@ -53,6 +53,67 @@ let cachedModelPtr = null;
 const activeDownloads = new Map();
 
 /**
+ * Find the directory containing libvosk.dll and its dependent DLLs.
+ * Ensures DLLs are also mirrored to persistent userData/vosk-native for portable stability.
+ */
+function getNativeDllDir() {
+  const dlls = ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libvosk.dll'];
+
+  // 1. Check persistent userData/vosk-native directory first
+  if (modelsDir) {
+    const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native');
+    const allUserExist = dlls.every((d) => fs.existsSync(path.join(userNativeDir, d)));
+    if (allUserExist) {
+      return userNativeDir;
+    }
+  }
+
+  // 2. Search candidate package/app directories
+  const execDir = process.execPath ? path.dirname(process.execPath) : '';
+  const candidateDirs = [
+    path.join(__dirname, 'native', 'win-x86_64'),
+    path.join(__dirname.replace(/app\.asar[\\/]?$/, 'app.asar.unpacked'), 'native', 'win-x86_64'),
+    path.join(__dirname, '..', 'app.asar.unpacked', 'native', 'win-x86_64'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'win-x86_64'),
+    path.join(process.resourcesPath || '', 'native', 'win-x86_64'),
+    path.join(execDir, 'resources', 'app.asar.unpacked', 'native', 'win-x86_64'),
+    path.join(execDir, 'native', 'win-x86_64'),
+  ];
+
+  let foundDir = null;
+  for (const dir of candidateDirs) {
+    if (fs.existsSync(path.join(dir, 'libvosk.dll'))) {
+      foundDir = dir;
+      break;
+    }
+  }
+
+  // 3. If found in a packaged/temporary directory, mirror to persistent userData/vosk-native
+  if (foundDir && modelsDir) {
+    try {
+      const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native');
+      fs.mkdirSync(userNativeDir, { recursive: true });
+      for (const dll of dlls) {
+        const src = path.join(foundDir, dll);
+        const dst = path.join(userNativeDir, dll);
+        if (fs.existsSync(src)) {
+          if (!fs.existsSync(dst) || fs.statSync(src).size !== fs.statSync(dst).size) {
+            fs.copyFileSync(src, dst);
+          }
+        }
+      }
+      if (dlls.every((d) => fs.existsSync(path.join(userNativeDir, d)))) {
+        return userNativeDir;
+      }
+    } catch (copyErr) {
+      console.warn('[Vosk] Mirroring DLLs to userData failed:', copyErr.message);
+    }
+  }
+
+  return foundDir;
+}
+
+/**
  * Locate and load libvosk.dll with Koffi
  */
 function initNativeLibrary() {
@@ -68,27 +129,9 @@ function initNativeLibrary() {
     }
   }
 
-  const execDir = process.execPath ? path.dirname(process.execPath) : '';
-  const candidateDirs = [
-    path.join(__dirname, 'native', 'win-x86_64'),
-    path.join(__dirname.replace(/app\.asar$/, 'app.asar.unpacked'), 'native', 'win-x86_64'),
-    path.join(__dirname, '..', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(process.resourcesPath || '', 'native', 'win-x86_64'),
-    path.join(execDir, 'resources', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(execDir, 'native', 'win-x86_64'),
-  ];
-
-  let dllDir = null;
-  for (const dir of candidateDirs) {
-    if (fs.existsSync(path.join(dir, 'libvosk.dll'))) {
-      dllDir = dir;
-      break;
-    }
-  }
-
+  const dllDir = getNativeDllDir();
   if (!dllDir) {
-    const msg = 'libvosk.dll not found in candidate paths: ' + candidateDirs.join('; ');
+    const msg = 'libvosk.dll not found in candidate paths.';
     console.error('[Vosk]', msg);
     lastNativeLoadError = new Error(msg);
     return false;
@@ -609,15 +652,36 @@ function freeCachedModel() {
 }
 
 /**
- * Get or load a VoskModel instance for the given path
+ * Get or load a VoskModel instance for the given path or model ID
  */
-function getOrLoadModel(modelPath) {
+function getOrLoadModel(modelPathOrId) {
   if (!initNativeLibrary()) {
     throw new Error('Vosk native library could not be loaded: ' + (lastNativeLoadError?.message || 'Check native DLL dependencies.'));
   }
 
+  let actualPath = modelPathOrId;
+  // If actualPath is an object, extract modelPath or modelId
+  if (typeof actualPath === 'object' && actualPath !== null) {
+    actualPath = actualPath.path || actualPath.modelPath || actualPath.id || actualPath.modelId;
+  }
+
+  // If actualPath is not a valid directory or is just an ID, search installed models
+  if (!actualPath || !fs.existsSync(actualPath) || !isValidModelDir(actualPath)) {
+    const installed = listInstalledModels();
+    const match = installed.find((m) => m.id === actualPath || m.name === actualPath);
+    if (match) {
+      actualPath = match.path;
+    } else if (modelsDir && typeof actualPath === 'string') {
+      const candidate = path.join(modelsDir, actualPath);
+      if (fs.existsSync(candidate)) actualPath = candidate;
+    }
+  }
+
+  if (!actualPath || typeof actualPath !== 'string' || !fs.existsSync(actualPath)) {
+    throw new Error('Vosk model not found: ' + JSON.stringify(modelPathOrId));
+  }
+
   // Verify model directory
-  let actualPath = modelPath;
   if (!isValidModelDir(actualPath)) {
     const sub = fs.readdirSync(actualPath, { withFileTypes: true }).find((s) => s.isDirectory() && isValidModelDir(path.join(actualPath, s.name)));
     if (sub) actualPath = path.join(actualPath, sub.name);
@@ -645,42 +709,47 @@ function getOrLoadModel(modelPath) {
 /**
  * Transcribe 16kHz mono audio buffer using Vosk
  *
- * @param {string} modelPath - Full path to the Vosk model directory
+ * @param {string|object} modelPathOrOptions - Model path/ID or options object
  * @param {ArrayBuffer|Float32Array|Int16Array|Buffer} audioData - Audio samples
  * @param {number} sampleRate - Sample rate (defaults to 16000)
  * @param {Function} onProgress - Progress callback (fraction 0..1)
  * @returns {Promise<{ words: Array<{ word: string, start: number, end: number, conf: number }>, text: string }>}
  */
-async function transcribeAudio(modelPath, audioData, sampleRate = 16000, onProgress = null) {
+async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000, onProgress = null) {
+  let modelPath = modelPathOrOptions;
+  let rawAudio = audioData;
+  let sRate = sampleRate;
+  let progressCb = onProgress;
+
+  if (typeof modelPathOrOptions === 'object' && modelPathOrOptions !== null && !Array.isArray(modelPathOrOptions) && !Buffer.isBuffer(modelPathOrOptions) && !(modelPathOrOptions instanceof Uint8Array)) {
+    modelPath = modelPathOrOptions.modelPath || modelPathOrOptions.modelId || modelPathOrOptions.path;
+    rawAudio = modelPathOrOptions.audioData || modelPathOrOptions.audioBuffer;
+    sRate = modelPathOrOptions.sampleRate || 16000;
+    progressCb = modelPathOrOptions.onProgress || onProgress;
+  }
+
   const model = getOrLoadModel(modelPath);
 
   // Convert input to Int16 PCM buffer
   let pcmBuffer;
-  if (audioData instanceof Float32Array) {
-    const pcm16 = new Int16Array(audioData.length);
-    for (let i = 0; i < audioData.length; i++) {
-      const s = Math.max(-1, Math.min(1, audioData[i]));
+  if (rawAudio instanceof Float32Array) {
+    const pcm16 = new Int16Array(rawAudio.length);
+    for (let i = 0; i < rawAudio.length; i++) {
+      const s = Math.max(-1, Math.min(1, rawAudio[i]));
       pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     pcmBuffer = Buffer.from(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
-  } else if (audioData instanceof Int16Array) {
-    pcmBuffer = Buffer.from(audioData.buffer, audioData.byteOffset, audioData.byteLength);
-  } else if (Buffer.isBuffer(audioData)) {
-    pcmBuffer = audioData;
-  } else if (audioData instanceof ArrayBuffer) {
-    // Treat as Float32Array if length matches typical float or check
-    const floats = new Float32Array(audioData);
-    const pcm16 = new Int16Array(floats.length);
-    for (let i = 0; i < floats.length; i++) {
-      const s = Math.max(-1, Math.min(1, floats[i]));
-      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    pcmBuffer = Buffer.from(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
+  } else if (rawAudio instanceof Int16Array) {
+    pcmBuffer = Buffer.from(rawAudio.buffer, rawAudio.byteOffset, rawAudio.byteLength);
+  } else if (Buffer.isBuffer(rawAudio)) {
+    pcmBuffer = rawAudio;
+  } else if (rawAudio instanceof ArrayBuffer || rawAudio instanceof Uint8Array) {
+    pcmBuffer = Buffer.from(rawAudio);
   } else {
     throw new Error('Unsupported audio data format passed to transcribeAudio');
   }
 
-  const recognizer = vosk_recognizer_new(model, sampleRate);
+  const recognizer = vosk_recognizer_new(model, sRate);
   if (!recognizer) {
     throw new Error('Failed to create Vosk recognizer.');
   }
