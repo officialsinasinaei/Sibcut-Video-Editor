@@ -69,7 +69,8 @@
     "asar": true,
     "asarUnpack": [
       "**/native/**",
-      "**/node_modules/koffi/**"
+      "**/node_modules/koffi/**",
+      "**/node_modules/@koromix/**"
     ],
     "files": [
       "dist/**",

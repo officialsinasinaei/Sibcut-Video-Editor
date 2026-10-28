@@ -43,6 +43,7 @@ let vosk_recognizer_free = null;
 let isInitialized = false;
 let modelsDir = null;
 let appInstance = null;
+let lastNativeLoadError = null;
 
 // Keep the current loaded model in memory to avoid reloading on successive runs
 let cachedModelPath = null;
@@ -56,21 +57,26 @@ const activeDownloads = new Map();
  */
 function initNativeLibrary() {
   if (libvosk) return true;
+  lastNativeLoadError = null;
   if (!koffi) {
     try {
       koffi = require('koffi');
     } catch (err) {
+      lastNativeLoadError = err;
       console.error('[Vosk] Failed to require koffi:', err);
       return false;
     }
   }
 
+  const execDir = process.execPath ? path.dirname(process.execPath) : '';
   const candidateDirs = [
     path.join(__dirname, 'native', 'win-x86_64'),
     path.join(__dirname.replace(/app\.asar$/, 'app.asar.unpacked'), 'native', 'win-x86_64'),
     path.join(__dirname, '..', 'app.asar.unpacked', 'native', 'win-x86_64'),
     path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'win-x86_64'),
     path.join(process.resourcesPath || '', 'native', 'win-x86_64'),
+    path.join(execDir, 'resources', 'app.asar.unpacked', 'native', 'win-x86_64'),
+    path.join(execDir, 'native', 'win-x86_64'),
   ];
 
   let dllDir = null;
@@ -82,11 +88,35 @@ function initNativeLibrary() {
   }
 
   if (!dllDir) {
-    console.error('[Vosk] libvosk.dll not found in candidate paths:', candidateDirs);
+    const msg = 'libvosk.dll not found in candidate paths: ' + candidateDirs.join('; ');
+    console.error('[Vosk]', msg);
+    lastNativeLoadError = new Error(msg);
     return false;
   }
 
-  // Prepend to PATH so dependent DLLs (libstdc++-6, libgcc_s_seh-1, libwinpthread-1) resolve
+  // 1. Tell Windows OS to look in dllDir for dependent DLLs
+  try {
+    const k32 = koffi.load('kernel32.dll');
+    const SetDllDirectoryA = k32.func('int __stdcall SetDllDirectoryA(const char *lpPathName)');
+    SetDllDirectoryA(dllDir);
+  } catch (e) {
+    console.warn('[Vosk] SetDllDirectoryA call warning:', e.message);
+  }
+
+  // 2. Pre-load dependent MinGW / GCC / pthread DLLs in dependency order
+  const depFiles = ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll'];
+  for (const dep of depFiles) {
+    const depPath = path.join(dllDir, dep);
+    if (fs.existsSync(depPath)) {
+      try {
+        koffi.load(depPath);
+      } catch (depErr) {
+        console.warn(`[Vosk] Warning loading ${dep}:`, depErr.message);
+      }
+    }
+  }
+
+  // 3. Update PATH as fallback
   process.env.PATH = dllDir + ';' + process.env.PATH;
 
   try {
@@ -111,6 +141,7 @@ function initNativeLibrary() {
     return true;
   } catch (err) {
     console.error('[Vosk] Failed to load libvosk.dll:', err);
+    lastNativeLoadError = err;
     libvosk = null;
     return false;
   }
@@ -582,7 +613,7 @@ function freeCachedModel() {
  */
 function getOrLoadModel(modelPath) {
   if (!initNativeLibrary()) {
-    throw new Error('Vosk native library could not be loaded.');
+    throw new Error('Vosk native library could not be loaded: ' + (lastNativeLoadError?.message || 'Check native DLL dependencies.'));
   }
 
   // Verify model directory
