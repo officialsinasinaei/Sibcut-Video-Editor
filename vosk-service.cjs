@@ -13,7 +13,12 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
-const yauzl = require('yauzl');
+let yauzl = null;
+try {
+  yauzl = require('yauzl');
+} catch (e) {
+  console.warn('[Vosk] yauzl not loaded:', e.message);
+}
 let koffi = null;
 try {
   koffi = require('koffi');
@@ -62,6 +67,8 @@ function initNativeLibrary() {
 
   const candidateDirs = [
     path.join(__dirname, 'native', 'win-x86_64'),
+    path.join(__dirname.replace(/app\.asar$/, 'app.asar.unpacked'), 'native', 'win-x86_64'),
+    path.join(__dirname, '..', 'app.asar.unpacked', 'native', 'win-x86_64'),
     path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'win-x86_64'),
     path.join(process.resourcesPath || '', 'native', 'win-x86_64'),
   ];
@@ -130,12 +137,39 @@ function init(electronApp) {
 // ─── Zip Extraction ──────────────────────────────────────────────────────────
 
 /**
- * Safe unzipping with yauzl to target directory
+ * Safe unzipping with yauzl or native system tool (tar / powershell) to target directory
  */
 function extractZip(zipPath, targetDir) {
   return new Promise((resolve, reject) => {
+    function fallbackExtract() {
+      const { spawn } = require('child_process');
+      const tar = spawn('tar', ['-xf', zipPath, '-C', targetDir], { windowsHide: true });
+      tar.on('close', (code) => {
+        if (code === 0) return resolve(true);
+        // Fallback to PowerShell Expand-Archive
+        const ps = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force`], { windowsHide: true });
+        ps.on('close', (pCode) => {
+          if (pCode === 0) resolve(true);
+          else reject(new Error('Zip extraction failed with exit code ' + pCode));
+        });
+        ps.on('error', reject);
+      });
+      tar.on('error', () => {
+        const ps = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force`], { windowsHide: true });
+        ps.on('close', (pCode) => {
+          if (pCode === 0) resolve(true);
+          else reject(new Error('Zip extraction failed with exit code ' + pCode));
+        });
+        ps.on('error', reject);
+      });
+    }
+
+    if (!yauzl) {
+      return fallbackExtract();
+    }
+
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-      if (err) return reject(err);
+      if (err) return fallbackExtract();
       zipfile.readEntry();
       zipfile.on('entry', (entry) => {
         // Prevent zip-slip path traversal
@@ -159,7 +193,7 @@ function extractZip(zipPath, targetDir) {
         }
       });
       zipfile.on('end', () => resolve(true));
-      zipfile.on('error', reject);
+      zipfile.on('error', () => fallbackExtract());
     });
   });
 }
@@ -225,12 +259,18 @@ function getCatalog() {
   } catch {}
 
   // 2. Bundled fallback
-  const bundledPath = path.join(__dirname, 'src', 'assets', 'vosk-model-list.json');
-  try {
-    if (fs.existsSync(bundledPath)) {
-      return JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
-    }
-  } catch {}
+  const candidateCatalogPaths = [
+    path.join(__dirname, 'src', 'assets', 'vosk-model-list.json'),
+    path.join(__dirname, 'dist', 'assets', 'vosk-model-list.json'),
+    path.join(process.resourcesPath || '', 'src', 'assets', 'vosk-model-list.json'),
+  ];
+  for (const bundledPath of candidateCatalogPaths) {
+    try {
+      if (fs.existsSync(bundledPath)) {
+        return JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
+      }
+    } catch {}
+  }
 
   return [];
 }

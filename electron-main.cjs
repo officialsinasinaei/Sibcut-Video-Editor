@@ -286,8 +286,12 @@ app.whenReady().then(async () => {
   setupUpdaterIPC();
 
   // Initialize Vosk offline speech recognition service and IPC handlers
-  voskService.init(app);
-  setupVoskIPC(ipcMain, voskService);
+  try {
+    voskService.init(app);
+    setupVoskIPC(ipcMain, voskService);
+  } catch (err) {
+    console.error('[Main] Vosk init error:', err);
+  }
 
   const { port } = await startServer();
   serverPort = port;

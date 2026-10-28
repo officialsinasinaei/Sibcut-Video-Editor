@@ -51,7 +51,8 @@
     "sahel-font": "^3.4.0",
     "samim-font": "^4.0.5",
     "shabnam-font": "^5.0.0",
-    "tanha-font": "^0.10.0"
+    "tanha-font": "^0.10.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "axe-core": "4.14.0",
@@ -79,6 +80,7 @@
       "vosk-service.cjs",
       "electron-vosk-ipc.cjs",
       "native/**",
+      "src/assets/**",
       "build/icon.*"
     ],
     "extraResources": [],
