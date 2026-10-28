@@ -27,6 +27,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { checkForUpdates, setupUpdaterIPC } = require('./updater.cjs');
+const voskService = require('./vosk-service.cjs');
+const { setupVoskIPC, handleVoskHttp } = require('./electron-vosk-ipc.cjs');
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 const DIST = path.join(__dirname, 'dist');
@@ -64,6 +66,12 @@ const MIME = {
 function startServer() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
+      // Handle Vosk API endpoints
+      if (req.url.startsWith('/api/vosk/')) {
+        handleVoskHttp(req, res, voskService);
+        return;
+      }
+
       // Strip query string and decode URI
       let urlPath = req.url.split('?')[0];
       try { urlPath = decodeURIComponent(urlPath); } catch {}
@@ -164,6 +172,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
       // Allow the origin to use SharedArrayBuffer (already enforced by headers)
       // and the MediaPipe WASM models to fetch from the same origin.
     },
@@ -275,6 +284,10 @@ app.whenReady().then(async () => {
 
   // Initialize updater IPC handlers
   setupUpdaterIPC();
+
+  // Initialize Vosk offline speech recognition service and IPC handlers
+  voskService.init(app);
+  setupVoskIPC(ipcMain, voskService);
 
   const { port } = await startServer();
   serverPort = port;

@@ -7,3 +7,8 @@ release
 *.exe
 VideoStudio-Portable.exe
 build/icon.ico
+*.mp4
+*.zip
+tools/test-*.cjs
+tools/verify-*.cjs
+

@@ -44,6 +44,7 @@
     "@fontsource/vazirmatn": "^5.3.0",
     "@mediapipe/tasks-vision": "1.0.1",
     "gandom-font": "^0.8.0",
+    "koffi": "^3.3.4",
     "lucide": "1.54.0",
     "mediabunny": "1.61.3",
     "parastoo-font": "^2.0.1",
@@ -65,11 +66,19 @@
     "productName": "Video Studio",
     "copyright": "Copyright © 2026 Video Studio",
     "asar": true,
+    "asarUnpack": [
+      "**/native/**",
+      "**/node_modules/koffi/**"
+    ],
     "files": [
       "dist/**",
       "electron-main.cjs",
       "updater.cjs",
       "updater-ui.html",
+      "preload.cjs",
+      "vosk-service.cjs",
+      "electron-vosk-ipc.cjs",
+      "native/**",
       "build/icon.*"
     ],
     "extraResources": [],

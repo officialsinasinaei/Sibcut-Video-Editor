@@ -326,11 +326,18 @@
 
 /* Captions -------------------------------------------------------------------- */
 .cap-form {
-  padding-top: 6px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cap-form .field {
+  margin-bottom: 0;
 }
 
 .cap-form > .btn.block {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 /* Lyrics from music. */
@@ -652,4 +659,324 @@
 
 .tp-view[hidden] {
   display: none;
+}
+
+
+/* ─── Vosk Offline Speech Recognition & Model Manager ───────────────────────── */
+
+.vosk-model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.vosk-model-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.vosk-model-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.vosk-no-models-card {
+  padding: 14px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-panel-2, #1b1b1f);
+  border: 1px dashed var(--border-strong, #3b3b44);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.vosk-no-models-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent, #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vosk-no-models-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #fff);
+  margin: 0;
+}
+
+.vosk-no-models-desc {
+  font-size: 11.5px;
+  color: var(--text-2, #a1a1aa);
+  margin: 0;
+  line-height: 1.4;
+  max-width: 280px;
+}
+
+.vosk-no-models-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.vosk-no-models-actions .btn {
+  flex: 1;
+}
+
+/* Model Manager Dialog */
+.dialog.vosk-dialog {
+  width: min(740px, calc(100vw - 32px)) !important;
+}
+
+.vosk-dialog.dialog-box {
+  width: 680px;
+  max-width: 95vw;
+}
+
+.vosk-manager-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 70vh;
+  min-height: 440px;
+}
+
+.vosk-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.vosk-search-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.vosk-search-wrap svg {
+  position: absolute;
+  left: 10px;
+  color: var(--text-3, #71717a);
+  pointer-events: none;
+}
+
+.vosk-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-input, #18181b);
+  border: 1px solid var(--border, #27272a);
+  color: var(--text, #fff);
+  font-size: 13px;
+}
+
+.vosk-search-input:focus {
+  border-color: var(--accent, #6366f1);
+  outline: none;
+}
+
+.vosk-filter-bar {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--border, #27272a);
+  padding-bottom: 8px;
+}
+
+.vosk-filter-tab {
+  padding: 5px 12px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2, #a1a1aa);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vosk-filter-tab:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text, #fff);
+}
+
+.vosk-filter-tab.active {
+  background: var(--accent, #6366f1);
+  color: var(--on-accent, #fff);
+}
+
+.vosk-models-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.vosk-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-panel-2, #18181b);
+  border: 1px solid var(--border, #27272a);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.vosk-card:hover {
+  border-color: var(--border-strong, #3f3f46);
+  background: var(--bg-hover, #202024);
+}
+
+.vosk-card[data-installed='true'] {
+  border-left: 3px solid var(--success, #22c55e);
+}
+
+.vosk-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.vosk-card-flag {
+  font-size: 22px;
+  flex: none;
+  line-height: 1;
+}
+
+.vosk-card-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  flex: 1;
+}
+
+.vosk-card-lang {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vosk-card-name {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-3, #71717a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vosk-card-badges {
+  display: flex;
+  gap: 6px;
+  margin-left: 10px;
+  flex: none;
+}
+
+.vosk-badge {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2, #a1a1aa);
+  font-weight: 500;
+}
+
+.vosk-badge[data-type='small'] {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.vosk-badge[data-type='big'] {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
+
+.vosk-badge.size {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-3, #a1a1aa);
+}
+
+.vosk-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: 14px;
+}
+
+.vosk-installed-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--success, #22c55e);
+  margin-right: 4px;
+}
+
+.vosk-dl-wrap {
+  width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vosk-dl-bar {
+  height: 5px;
+  border-radius: 4px;
+  background: var(--border, #27272a);
+  overflow: hidden;
+}
+
+.vosk-dl-fill {
+  height: 100%;
+  background: var(--accent, #6366f1);
+  transition: width 0.2s linear;
+}
+
+.vosk-dl-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--text-2, #a1a1aa);
+}
+
+.vosk-cancel-btn {
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.vosk-empty-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-3, #71717a);
+  gap: 8px;
+}
+
+.vosk-status-bar {
+  font-size: 11px;
+  color: var(--text-3, #71717a);
+  text-align: right;
+  padding-top: 4px;
 }

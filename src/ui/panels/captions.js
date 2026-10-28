@@ -28,9 +28,16 @@ import { CAPTION_STYLES, applyCaptionStyle } from '../../model/caption-styles.js
 import { pickKeywords } from '../../model/text-marks.js';
 import { lookCanvas, hoverAnimateLook } from '../text-thumbs.js';
 import { tileGrid, tile } from './common.js';
+import {
+  isVoskAvailable,
+  listVoskModels,
+  selectAndImportModel,
+  transcribeWithVosk,
+} from '../../media/vosk.js';
+import { openVoskModelManager, getLangEmoji } from './vosk-models-dialog.js';
 import '../../styles/audio.css';
 
-const DEFAULT_OPTS = { language: 'auto', scope: 'main', preset: 'yellow-caption', maxWords: 5, position: 'bottom', lyricsStyle: LYRIC_STYLE, lyricsPosition: 'bottom', lyricsIsolate: true };
+const DEFAULT_OPTS = { language: 'auto', scope: 'main', preset: 'yellow-caption', maxWords: 5, position: 'bottom', lyricsStyle: LYRIC_STYLE, lyricsPosition: 'bottom', lyricsIsolate: true, voskModelId: null, voskModelPath: null };
 
 const isCaption = (c) => c.type === 'text' && c.caption;
 
@@ -111,9 +118,18 @@ export async function prepareCaptions(ctx, opts, { mode = 'keep', signal, onStep
   const mix = await mixdown(project, ctx.library, { scope: o.scope, signal, onProgress: (f) => onStep?.(0, f) });
   onStep?.(1, 0);
   const fake = import.meta.env.DEV ? globalThis.__vsFakeTranscript : null;
-  const words = fake
-    ? await fake(mix, STT_RATE)
-    : await transcribeMix(mix, STT_RATE, { language: o.language, signal, testMode: Boolean(import.meta.env.DEV && globalThis.__vsSpeechTestMode), onProgress: (f) => onStep?.(1, f) });
+    let words;
+  if (fake) {
+    words = await fake(mix, STT_RATE);
+  } else if (o.voskModelPath) {
+    const res = await transcribeWithVosk(o.voskModelPath, mix, STT_RATE, {
+      signal,
+      onProgress: (f) => onStep?.(1, f),
+    });
+    words = res.words || [];
+  } else {
+    words = await transcribeMix(mix, STT_RATE, { language: o.language, signal, testMode: Boolean(import.meta.env.DEV && globalThis.__vsSpeechTestMode), onProgress: (f) => onStep?.(1, f) });
+  }
   if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   onStep?.(2, 0);
   const preset = TEXT_PRESETS.find((p) => p.id === o.preset);
@@ -181,42 +197,180 @@ function signInState(ctx, title, text) {
 
 function autoPanel(ctx, opts, save) {
   const { store } = ctx;
-  if (!aiAvailable(ctx)) return signInState(ctx, 'Automatic captions unavailable', 'Speech-to-text transcription requires online cloud services and is not available in local desktop mode. You can still import subtitle files or add captions by hand.');
-  const lang = selectField({ label: 'Spoken language', options: LANGUAGES, value: opts.language, onChange: (v) => { opts.language = v; save(); } });
+
+  let installedModels = [];
+  let selectedModel = null;
+
+  const modelPickerWrap = h('div.vosk-model-picker');
   const scope = segmented({
     label: 'Listen to',
     options: [{ value: 'main', label: 'Base track' }, { value: 'all', label: 'All audio' }],
     value: opts.scope,
     onChange: (v) => { opts.scope = v; save(); },
   });
-  const words = sliderField({ label: 'Max words per caption', min: 1, max: 12, step: 1, value: opts.maxWords, onInput: (v) => { opts.maxWords = v; save(); } });
+  const words = sliderField({
+    label: 'Max words per caption',
+    min: 1,
+    max: 12,
+    step: 1,
+    value: opts.maxWords,
+    onInput: (v) => { opts.maxWords = v; save(); },
+  });
   const styles = styleControls(opts, save);
-  const generate = h('button.btn.primary.block', { type: 'button' }, icon('magic', 16), 'Generate');
+
+  const generate = h('button.btn.primary.block', { type: 'button' }, icon('magic', 16), 'Generate captions');
   generate.addEventListener('click', () => run());
 
-  const STEPS = ['Preparing audio', 'Transcribing', 'Creating captions'];
+  const STEPS = ['Preparing audio', 'Transcribing with Vosk', 'Creating captions'];
   const { el: progress, cancel, setStep } = stepProgress(STEPS, 'Generating captions');
   let abort = null;
   cancel.addEventListener('click', () => abort?.abort());
 
+  function renderModelPicker() {
+    modelPickerWrap.replaceChildren();
+
+    if (!installedModels.length) {
+      // Empty state card encouraging model download or import
+      const dlBtn = h('button.btn.primary.small', { type: 'button' }, icon('download', 14), 'Download Models');
+      dlBtn.addEventListener('click', () => {
+        openVoskModelManager(ctx, {
+          activeModelId: opts.voskModelId,
+          onSelectModel: (m) => handleModelSelected(m),
+        });
+      });
+
+      const importBtn = h('button.btn.small', { type: 'button' }, icon('folder', 14), 'Import .zip');
+      importBtn.addEventListener('click', async () => {
+        try {
+          const imported = await selectAndImportModel();
+          if (imported) {
+            toast(`Imported model: ${imported.name}`, { kind: 'success' });
+            await refreshModels(imported.id);
+          }
+        } catch (err) {
+          toast(err.message || 'Import failed', { kind: 'error' });
+        }
+      });
+
+      const card = h('div.vosk-no-models-card',
+        h('div.vosk-no-models-icon', icon('mic', 20)),
+        h('h4.vosk-no-models-title', 'Speech Recognition Models'),
+        h('p.vosk-no-models-desc', 'Download a language model or import an existing .zip model to generate captions completely offline.'),
+        h('div.vosk-no-models-actions', dlBtn, importBtn)
+      );
+
+      modelPickerWrap.append(card);
+      return;
+    }
+
+    // Dropdown with installed models
+    const select = h('select.select.vosk-model-select', { id: 'vosk-model-select', 'aria-label': 'Spoken language model' });
+    for (const m of installedModels) {
+      const emoji = getLangEmoji(m.lang);
+      const typeLabel = m.type === 'small' ? 'fast' : 'accurate';
+      const opt = h('option', { value: m.id }, `${emoji} ${m.langText || m.name} (${typeLabel})`);
+      select.append(opt);
+    }
+
+    if (opts.voskModelId && installedModels.some((m) => m.id === opts.voskModelId)) {
+      select.value = opts.voskModelId;
+    } else {
+      select.value = installedModels[0].id;
+      opts.voskModelId = installedModels[0].id;
+      opts.voskModelPath = installedModels[0].path;
+      save();
+    }
+
+    selectedModel = installedModels.find((m) => m.id === select.value) || installedModels[0];
+    opts.voskModelPath = selectedModel?.path || null;
+
+    select.addEventListener('change', () => {
+      opts.voskModelId = select.value;
+      selectedModel = installedModels.find((m) => m.id === select.value) || null;
+      opts.voskModelPath = selectedModel?.path || null;
+      save();
+    });
+
+    const manageBtn = h('button.btn.small', { type: 'button', 'aria-label': 'Manage models' }, icon('download', 14), 'Models');
+    manageBtn.title = 'Download or import language models';
+    manageBtn.addEventListener('click', () => {
+      openVoskModelManager(ctx, {
+        activeModelId: opts.voskModelId,
+        onSelectModel: (m) => handleModelSelected(m),
+      });
+    });
+
+    const row = h('div.vosk-model-row', select, manageBtn);
+    const field = h('div.field', h('label.field-label', { for: 'vosk-model-select' }, 'Language model'), row);
+    modelPickerWrap.append(field);
+  }
+
+  function handleModelSelected(model) {
+    if (!model) return;
+    opts.voskModelId = model.id;
+    opts.voskModelPath = model.path;
+    save();
+    refreshModels(model.id);
+  }
+
+  async function refreshModels(preferredId = null) {
+    try {
+      const data = await listVoskModels(false);
+      installedModels = data.installed || [];
+      if (preferredId) {
+        opts.voskModelId = preferredId;
+      }
+      renderModelPicker();
+    } catch (err) {
+      console.error('[Captions] Failed to list models:', err);
+    }
+  }
+
+  // Load models on init
+  refreshModels(opts.voskModelId);
+
   async function run() {
     if (abort) return;
+
+    if (!installedModels.length || !selectedModel) {
+      toast('Please download or import a language model first.', { kind: 'info' });
+      openVoskModelManager(ctx, {
+        activeModelId: opts.voskModelId,
+        onSelectModel: (m) => {
+          handleModelSelected(m);
+          run();
+        },
+      });
+      return;
+    }
+
     if (!clipsForScope(store.project, opts.scope).length) {
       toast(opts.scope === 'main' ? 'The base track has no sound. Choose All audio, or add clips with sound.' : 'There is no audio in this project to caption.', { kind: 'info' });
       return;
     }
+
     const mode = await askReplace(store);
     if (!mode) return;
+
     abort = new AbortController();
     const { signal } = abort;
     generate.disabled = true;
     progress.hidden = false;
     let said = -1;
+
     try {
-      const n = await generateCaptions(ctx, opts, { mode, signal, onStep: (i, f) => {
-        setStep(i, f);
-        if (i !== said) announce(STEPS[(said = i)]);
-      } });
+      const n = await generateCaptions(ctx, {
+        ...opts,
+        voskModelPath: selectedModel.path,
+      }, {
+        mode,
+        signal,
+        onStep: (i, f) => {
+          setStep(i, f);
+          if (i !== said) announce(STEPS[(said = i)]);
+        },
+      });
+
       if (!n) toast('No speech was found in the audio.', { kind: 'info' });
       else toast(`Added ${n} caption${n === 1 ? '' : 's'}.`, { kind: 'success' });
     } catch (err) {
@@ -233,8 +387,8 @@ function autoPanel(ctx, opts, save) {
   }
 
   const el = h('div.cap-form',
-    h('p.asset-hint', 'Turn speech into captions on a new text track. You can edit them afterwards.'),
-    lang.el,
+    h('p.asset-hint', 'Generate automatic subtitles from speech using offline Vosk models.'),
+    modelPickerWrap,
     fieldRow('Listen to', scope.el, 'cap-scope'),
     styles.els,
     words.el,
@@ -242,10 +396,12 @@ function autoPanel(ctx, opts, save) {
     progress,
   );
   scope.el.setAttribute('aria-labelledby', 'cap-scope');
+
   return {
     el,
     sync() {
       styles.sync();
+      refreshModels(opts.voskModelId);
     },
   };
 }
