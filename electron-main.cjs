@@ -29,10 +29,23 @@ const path = require('path');
 const { checkForUpdates, setupUpdaterIPC } = require('./updater.cjs');
 const voskService = require('./vosk-service.cjs');
 const { setupVoskIPC, handleVoskHttp } = require('./electron-vosk-ipc.cjs');
+const { getPortableDir, isWritable, setupProjectsIPC } = require('./electron-projects-ipc.cjs');
+
+// ─── Portable UserData Configuration ──────────────────────────────────────────
+const PORTABLE_DIR = getPortableDir(app);
+const userDataDir = path.join(PORTABLE_DIR, 'data');
+if (isWritable(userDataDir)) {
+  try {
+    app.setPath('userData', userDataDir);
+  } catch (err) {
+    console.warn('[Main] Could not configure portable userData directory:', err.message);
+  }
+}
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 const DIST = path.join(__dirname, 'dist');
 const ICON = path.join(__dirname, 'build', 'icon.png');
+
 
 // ─── MIME types ───────────────────────────────────────────────────────────────
 const MIME = {
@@ -51,9 +64,16 @@ const MIME = {
   '.gif':  'image/gif',
   '.mp4':  'video/mp4',
   '.webm': 'video/webm',
+  '.mov':  'video/quicktime',
+  '.mkv':  'video/x-matroska',
+  '.avi':  'video/x-msvideo',
   '.mp3':  'audio/mpeg',
   '.wav':  'audio/wav',
   '.ogg':  'audio/ogg',
+  '.m4a':  'audio/mp4',
+  '.aac':  'audio/aac',
+  '.flac': 'audio/flac',
+  '.cube': 'text/plain',
   '.tflite': 'application/octet-stream',
   '.task': 'application/octet-stream',
   '.zip':  'application/zip',
@@ -62,6 +82,104 @@ const MIME = {
   '.ttf':   'font/ttf',
 };
 
+// ─── Deterministic loopback port ─────────────────────────────────────────────
+const PREFERRED_PORT = 52420;
+
+function handleLocalMediaHttp(req, res) {
+  try {
+    const parsedUrl = new URL(req.url, `http://127.0.0.1:${serverPort || PREFERRED_PORT}`);
+    const filePath = parsedUrl.searchParams.get('path');
+    if (!filePath || !fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Media file not found');
+      return;
+    }
+    const resolvedPath = path.resolve(filePath);
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Path is a directory');
+      return;
+    }
+
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const mime = MIME[ext] || 'application/octet-stream';
+    const total = stat.size;
+
+    const headers = {
+      'Content-Type': mime,
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'Accept-Ranges': 'bytes',
+    };
+
+    if (req.method === 'HEAD') {
+      res.writeHead(200, {
+        ...headers,
+        'Content-Length': total,
+      });
+      res.end();
+      return;
+    }
+
+    const rangeHeader = req.headers['range'];
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+      if (!match) {
+        res.writeHead(416, { 'Content-Range': `bytes */${total}` });
+        res.end();
+        return;
+      }
+      const [, startStr, endStr] = match;
+      let start = 0;
+      let end = total - 1;
+
+      if (startStr === '' && endStr !== '') {
+        const suffixLen = parseInt(endStr, 10);
+        start = Math.max(0, total - suffixLen);
+        end = total - 1;
+      } else if (startStr !== '' && endStr === '') {
+        start = parseInt(startStr, 10);
+        end = total - 1;
+      } else if (startStr !== '' && endStr !== '') {
+        start = parseInt(startStr, 10);
+        end = parseInt(endStr, 10);
+      } else {
+        res.writeHead(416, { 'Content-Range': `bytes */${total}` });
+        res.end();
+        return;
+      }
+
+      if (start > end || start >= total || end >= total) {
+        res.writeHead(416, { 'Content-Range': `bytes */${total}` });
+        res.end();
+        return;
+      }
+
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        ...headers,
+        'Content-Range': `bytes ${start}-${end}/${total}`,
+        'Content-Length': chunkSize,
+      });
+      const stream = fs.createReadStream(resolvedPath, { start, end });
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
+    } else {
+      headers['Content-Length'] = total;
+      res.writeHead(200, headers);
+      const stream = fs.createReadStream(resolvedPath);
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
+    }
+  } catch (err) {
+    console.error('[Server] /api/local-media error:', err);
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Internal server error');
+  }
+}
+
 // ─── Local file server ────────────────────────────────────────────────────────
 function startServer() {
   return new Promise((resolve) => {
@@ -69,6 +187,12 @@ function startServer() {
       // Handle Vosk API endpoints
       if (req.url.startsWith('/api/vosk/')) {
         handleVoskHttp(req, res, voskService);
+        return;
+      }
+
+      // Handle linked local media streaming with full range seeking
+      if (req.url.startsWith('/api/local-media')) {
+        handleLocalMediaHttp(req, res);
         return;
       }
 
@@ -123,11 +247,27 @@ function startServer() {
       }
     });
 
-    server.listen(0, '127.0.0.1', () => {
-      resolve({ server, port: server.address().port });
-    });
+    const tryListen = (port) => {
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Server] Port ${port} is in use, attempting ${port + 1}...`);
+          tryListen(port + 1);
+        } else {
+          console.warn(`[Server] Error listening on port ${port}, falling back to port 0:`, err.message);
+          server.listen(0, '127.0.0.1', () => {
+            resolve({ server, port: server.address().port });
+          });
+        }
+      });
+      server.listen(port, '127.0.0.1', () => {
+        resolve({ server, port });
+      });
+    };
+
+    tryListen(PREFERRED_PORT);
   });
 }
+
 
 // ─── Window state persistence ─────────────────────────────────────────────────
 const STATE_FILE = path.join(app.getPath('userData'), 'window-state.json');
@@ -218,12 +358,53 @@ async function createWindow() {
 // ─── Application menu ─────────────────────────────────────────────────────────
 function buildMenu() {
   const isMac = process.platform === 'darwin';
+  const sendMenu = (action, data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('menu:action', action, data);
+    }
+  };
+
   const template = [
     ...(isMac ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
       submenu: [
-        isMac ? { role: 'close' } : { role: 'quit', label: 'Exit' },
+        {
+          label: 'New Project',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendMenu('new-project'),
+        },
+        {
+          label: 'Open Project...',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => sendMenu('open-project'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Save Project',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => sendMenu('save-project'),
+        },
+        {
+          label: 'Save Project As...',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => sendMenu('save-project-as'),
+        },
+        {
+          label: 'Export Project Bundle (.zip)...',
+          click: () => sendMenu('export-bundle'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Open Projects Folder in Explorer',
+          click: () => sendMenu('open-projects-folder'),
+        },
+        {
+          label: 'Change Projects Folder...',
+          click: () => sendMenu('change-projects-folder'),
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit', label: 'Exit', accelerator: 'CmdOrCtrl+Q' },
       ],
     },
     {
@@ -284,6 +465,9 @@ app.whenReady().then(async () => {
 
   // Initialize updater IPC handlers
   setupUpdaterIPC();
+
+  // Initialize native project storage IPC handlers
+  setupProjectsIPC(ipcMain, app, () => mainWindow);
 
   // Initialize Vosk offline speech recognition service and IPC handlers
   try {

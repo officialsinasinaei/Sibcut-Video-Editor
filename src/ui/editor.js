@@ -92,6 +92,10 @@ export class Editor {
       exitToHome: () => this.exit(),
       newProject: () => this.exit({ create: true }),
       openProject: onOpenProject ? (id) => this.exit({ open: id }) : null,
+      saveNow: () => this.saver.save(),
+      saveProjectAs: () => this.saveProjectAs(),
+      openProjectFileDialog: () => this.openProjectFileDialog(),
+      exportProjectBundle: () => this.exportBundle(),
       openScriptVideo: () => import('./script-video.js').then((m) => m.openScriptVideo(ctx)),
       openHighlights: () => import('./highlights-dialog.js').then((m) => m.openHighlights(ctx)),
       openExport: () => {
@@ -547,6 +551,82 @@ export class Editor {
     if (changed && relayout) {
       this.ctx.playerView.relayout?.();
       this.ctx.assets.relayout?.();
+    }
+  }
+
+  async saveProjectAs() {
+    if (typeof window !== 'undefined' && window.projectStorageAPI?.showSaveProjectAsDialog) {
+      const defaultName = `${this.store.project.name || 'Project'}.vsproj`;
+      const res = await window.projectStorageAPI.showSaveProjectAsDialog(defaultName);
+      if (!res.canceled && res.filePath) {
+        const lower = res.filePath.toLowerCase();
+        if (lower.endsWith('.zip')) {
+          await this.exportBundle(res.filePath);
+          return;
+        }
+        const projectData = this.store.projectForSave ? this.store.projectForSave() : structuredClone(this.store.project);
+        await window.projectStorageAPI.writeJSON(null, projectData, { absPath: res.filePath });
+        toast(`Project saved to ${res.filePath}`, { kind: 'success' });
+      }
+    }
+  }
+
+  async openProjectFileDialog() {
+    if (typeof window !== 'undefined' && window.projectStorageAPI?.showOpenProjectDialog) {
+      const res = await window.projectStorageAPI.showOpenProjectDialog();
+      if (!res.canceled && res.filePaths?.[0]) {
+        const filePath = res.filePaths[0];
+        const lower = filePath.toLowerCase();
+        try {
+          if (lower.endsWith('.vsproj')) {
+            const raw = await window.projectStorageAPI.readJSON(null, { absPath: filePath });
+            if (!raw) throw new Error('Could not read project file or file is empty.');
+            const { normalizeProject } = await import('../model/project.js');
+            const project = normalizeProject(raw);
+            await this.library.saveProject(project);
+            this.exit({ open: project.id });
+          } else if (lower.endsWith('.zip')) {
+            const buffer = await window.projectStorageAPI.readBinary(null, { absPath: filePath });
+            if (!buffer) throw new Error('Could not read bundle file.');
+            const blob = new Blob([buffer], { type: 'application/zip' });
+            const { importProjectBundle } = await import('../storage/bundle.js');
+            const { project } = await importProjectBundle(this.library, blob);
+            this.exit({ open: project.id });
+          } else {
+            toast('Unsupported file type. Please select a .vsproj or .zip file.', { kind: 'error' });
+          }
+        } catch (err) {
+          console.error(err);
+          toast(err?.message || "Couldn't open the project file.", { kind: 'error' });
+        }
+      }
+    }
+  }
+
+  async exportBundle(targetFilePath = null) {
+    if (typeof window !== 'undefined' && window.projectStorageAPI?.showSaveProjectAsDialog) {
+      let filePath = targetFilePath;
+      if (!filePath) {
+        const defaultName = `${this.store.project.name || 'Project'}.video-studio.zip`;
+        const res = await window.projectStorageAPI.showSaveProjectAsDialog(defaultName);
+        if (res.canceled || !res.filePath) return;
+        filePath = res.filePath;
+      }
+      toast('Packaging project bundle...');
+      try {
+        const { exportProjectBundle } = await import('../storage/bundle.js');
+        const { blob } = await exportProjectBundle(this.library, this.store.project);
+        const arrayBuffer = await blob.arrayBuffer();
+        await window.projectStorageAPI.writeBinary(null, new Uint8Array(arrayBuffer), { absPath: filePath });
+        toast(`Exported bundle to ${filePath}`, { kind: 'success' });
+      } catch (err) {
+        console.error(err);
+        toast("Couldn't export bundle.", { kind: 'error' });
+      }
+    } else {
+      const { exportProjectBundle, downloadBlob } = await import('../storage/bundle.js');
+      const { blob, fileName } = await exportProjectBundle(this.library, this.store.project);
+      downloadBlob(blob, fileName);
     }
   }
 

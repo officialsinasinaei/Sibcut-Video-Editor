@@ -152,7 +152,11 @@ export function createCommands(ctx) {
     { id: 'scriptToVideo', label: 'Script to video', group: 'File', keys: [], run: () => ctx.openScriptVideo?.() },
     { id: 'shareReview', label: 'Share for review', group: 'File', keys: [], run: () => ctx.openShareReview?.() },
     { id: 'reviewComments', label: 'Show review comments', group: 'File', keys: [], run: () => ctx.review?.toggle() },
+    { id: 'newProject', label: 'New project', group: 'File', keys: ['Mod+N'], run: () => ctx.newProject?.() },
     { id: 'save', label: 'Save now', group: 'File', keys: ['Mod+S'], run: () => ctx.saveNow?.() },
+    { id: 'saveAs', label: 'Save project as...', group: 'File', keys: ['Mod+Shift+S'], run: () => ctx.saveProjectAs?.() },
+    { id: 'openProjectFile', label: 'Open project file...', group: 'File', keys: ['Mod+O'], run: () => ctx.openProjectFileDialog?.() },
+    { id: 'exportBundle', label: 'Export project bundle (.zip)...', group: 'File', keys: [], run: () => ctx.exportProjectBundle?.() },
 
     { id: 'preferences', label: 'Preferences', group: 'File', keys: ['Mod+Comma'], run: () => ctx.openPreferences?.() },
 

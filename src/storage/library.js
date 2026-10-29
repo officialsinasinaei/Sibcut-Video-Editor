@@ -303,6 +303,8 @@ export class Library extends Emitter {
     const { probe, extOf } = await import('../media/probe.js');
     const info = await probe(file);
     const hash = await fingerprint(file);
+    const localPath = typeof file?.path === 'string' && file.path ? file.path : undefined;
+    const isElec = typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron);
     const asset = normalizeAsset({
       id: uid('a'),
       kind: info.kind,
@@ -319,9 +321,12 @@ export class Library extends Emitter {
       hasVideo: info.hasVideo,
       added: Date.now(),
       origin,
+      localPath,
     });
     this.blobs.set(hash, file);
-    this._store(asset, file);
+    if (!localPath || !isElec) {
+      this._store(asset, file);
+    }
     return asset;
   }
 
@@ -420,9 +425,36 @@ export class Library extends Emitter {
    * media folder. Files still being uploaded (or retried) are not missing.
    */
   async missingMedia(assets) {
-    this._storedMedia(true);
-    const stored = await this.stored.files;
-    return assets.filter((a) => !stored.has(`${a.hash}.${a.ext}`) && !this.uploads.has(a.hash) && !this.failed.has(a.hash));
+    const isElec = typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron);
+    const missing = [];
+    const nonLocalAssets = [];
+
+    if (isElec && window.projectStorageAPI?.exists) {
+      for (const a of assets) {
+        if (a.localPath) {
+          const exists = await window.projectStorageAPI.exists(null, { absPath: a.localPath }).catch(() => false);
+          if (!exists) {
+            missing.push(a);
+          }
+        } else {
+          nonLocalAssets.push(a);
+        }
+      }
+    } else {
+      nonLocalAssets.push(...assets);
+    }
+
+    if (nonLocalAssets.length > 0) {
+      this._storedMedia(true);
+      const stored = await this.stored.files;
+      for (const a of nonLocalAssets) {
+        if (!stored.has(`${a.hash}.${a.ext}`) && !this.uploads.has(a.hash) && !this.failed.has(a.hash)) {
+          missing.push(a);
+        }
+      }
+    }
+
+    return missing;
   }
 
   /**
@@ -444,6 +476,17 @@ export class Library extends Emitter {
   }
 
   async _readMedia(asset) {
+    if (asset?.localPath && typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron)) {
+      try {
+        const res = await fetch(`/api/local-media?path=${encodeURIComponent(asset.localPath)}`);
+        if (res.ok) {
+          const b = await res.blob();
+          if (b) return b;
+        }
+      } catch (e) {
+        console.warn('[Library] Failed reading local-media stream:', e);
+      }
+    }
     const path = this.mediaPath(asset);
     let blob = this.cache ? await this.cache.readBlob(path).catch(() => null) : null;
     if (!blob) {
@@ -457,6 +500,9 @@ export class Library extends Emitter {
 
   /** Object URL for an asset, created once and reused. */
   async mediaURL(asset) {
+    if (asset?.localPath && typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron)) {
+      return `/api/local-media?path=${encodeURIComponent(asset.localPath)}`;
+    }
     const have = this.urls.get(asset.hash);
     if (have) return have;
     const blob = await this.mediaBlob(asset);

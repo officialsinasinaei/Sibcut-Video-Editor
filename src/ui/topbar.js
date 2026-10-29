@@ -100,7 +100,7 @@ export function createTopbar(ctx) {
   // Desktop menu bar; on narrow windows the app menu above holds everything.
   const menus = {
     File: () => [
-      { label: 'New project', icon: 'plus', onSelect: () => ctx.newProject() },
+      cmd('newProject', { icon: 'plus', label: 'New project' }),
       { label: 'Back to projects', icon: 'home', onSelect: () => ctx.exitToHome() },
       'separator',
       cmd('import', { icon: 'import', label: 'Import media...' }),
@@ -110,11 +110,18 @@ export function createTopbar(ctx) {
       cmd('newTimeline', { icon: 'timelinePlus', label: 'New timeline...' }),
       { label: 'Timelines', icon: 'timelines', submenu: () => ctx.timelines?.menuItems() || [] },
       'separator',
+      cmd('save', { icon: 'cloudCheck', label: 'Save project' }),
+      ctx.saveProjectAs ? { label: 'Save project as...', icon: 'save', shortcut: 'Mod+Shift+S', onSelect: () => ctx.saveProjectAs() } : null,
+      ctx.openProjectFileDialog ? { label: 'Open project file...', icon: 'folderOpen', shortcut: 'Mod+O', onSelect: () => ctx.openProjectFileDialog() } : null,
+      ctx.exportProjectBundle ? { label: 'Export project bundle (.zip)...', icon: 'package', onSelect: () => ctx.exportProjectBundle() } : null,
+      typeof window !== 'undefined' && window.projectStorageAPI?.isElectron
+        ? { label: 'Open projects folder', icon: 'folderOpen', onSelect: () => window.projectStorageAPI.openInExplorer() }
+        : null,
+      'separator',
       cmd('export', { icon: 'export', label: 'Export...' }),
       cmd('shareReview', { icon: 'shareReview', label: 'Share for review...' }),
       cmd('reviewComments', { icon: 'comment', label: 'Review comments', checked: Boolean(ctx.review?.open) }),
       ctx.exportStill ? { label: 'Export frame as image', icon: 'image', onSelect: () => ctx.exportStill() } : null,
-      cmd('save', { icon: 'cloudCheck' }),
       'separator',
       { label: 'Project settings...', icon: 'settings', onSelect: () => ctx.openProjectSettings() },
     ].filter(Boolean),
@@ -239,10 +246,17 @@ export function createTopbar(ctx) {
     else if (s === 'error') statusText = status.textContent = "Couldn't save. Retrying...";
     else if (s === 'pending') statusText = status.textContent = 'Unsaved changes';
     else {
-      const local = ctx.library?.backend?.kind === 'local';
+      const isElec = ctx.library?.backend?.kind === 'electron-disk';
+      const local = ctx.library?.backend?.kind === 'local' || isElec;
       const where = local ? 'Saved locally' : 'Auto saved';
       statusText = `${where}: ${fmt(at)}`;
+      if (isElec) {
+        const folder = ctx.library?.backend?.getActiveProjectFolder?.();
+        if (folder) statusText += ` (Projects/${folder}/project.vsproj)`;
+      }
       status.replaceChildren(h('span.save-status-long', `${where}: `), h('span.save-status-short', { 'aria-hidden': 'true' }, 'Saved '), fmt(at));
+      status.setAttribute('data-tip', statusText);
+      status.title = statusText;
     }
     fitStatus();
     // Where the status has no room (phones, narrow tablets), a failed save still has to be seen.

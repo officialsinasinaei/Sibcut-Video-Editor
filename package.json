@@ -80,6 +80,7 @@
       "preload.cjs",
       "vosk-service.cjs",
       "electron-vosk-ipc.cjs",
+      "electron-projects-ipc.cjs",
       "native/**",
       "src/assets/**",
       "build/icon.*"

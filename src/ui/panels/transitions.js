@@ -16,12 +16,12 @@ export function transitionsTab(ctx) {
         tileGrid(list.map((t) => {
           const el = tile({
             label: t.label,
-            preview: lookPreview('transition', t.id, { progress: 0.5 }),
+            preview: lookPreview('transition', t.id, { progress: 0.5, cat: t.cat }),
             onAdd: () => ctx.actions.applyTransition(t.id),
             drag: { kind: 'transition', id: t.id },
             addLabel: `Add ${t.label} transition`,
           });
-          hoverAnimate(el, 'transition', t.id);
+          hoverAnimate(el, 'transition', t.id, { cat: t.cat });
           return el;
         }), { label: 'Transitions' }),
       );

@@ -20,10 +20,10 @@ const CATEGORIES = [
 ];
 
 /** Preview that fills in once the LUTs it uses are loaded. */
-function setupPreview(ctx, setup) {
-  const canvas = gradePreview(setup);
+function setupPreview(ctx, setup, cat = 'layer') {
+  const canvas = gradePreview(setup, null, { cat });
   const id = setup.grade?.lut?.id;
-  if (id && !getLut(id)) loadLut(id, ctx.library).then((got) => got && gradePreview(setup, canvas));
+  if (id && !getLut(id)) loadLut(id, ctx.library).then((got) => got && gradePreview(setup, canvas, { cat }));
   return canvas;
 }
 
@@ -67,7 +67,7 @@ export function adjustTab(ctx) {
   function renderLayer() {
     const t = tile({
       label: 'Custom color layer',
-      preview: setupPreview(ctx, {}),
+      preview: setupPreview(ctx, {}, 'layer'),
       onAdd: () => actions.addAdjustment(),
       drag: { kind: 'adjust' },
       addLabel: 'Add color layer',
@@ -90,7 +90,7 @@ export function adjustTab(ctx) {
       return removable(tile({
         label: e.name,
         sub: `${e.kind.toUpperCase()} ${e.size}`,
-        preview: setupPreview(ctx, setup),
+        preview: setupPreview(ctx, setup, 'luts'),
         active: clip?.grade?.lut?.id === e.id,
         onAdd: () => use(e.name, setup, (c) => applyLut(ctx, c.id, e)),
         drag: { kind: 'adjust', name: e.name, grade: setup.grade },
@@ -114,7 +114,7 @@ export function adjustTab(ctx) {
     hint.textContent = clip ? 'Click a preset to apply it to the selected clip.' : 'Click a preset to add it as a color layer, or select a clip first to apply it to that clip.';
     const tiles = list.map((p) => removable(tile({
       label: p.name,
-      preview: setupPreview(ctx, p),
+      preview: setupPreview(ctx, p, 'presets'),
       onAdd: () => use(p.name, p, (c) => applyPreset(ctx, c.id, p)),
       drag: { kind: 'adjust', name: p.name, adjust: p.adjust, grade: p.grade },
       addLabel: clip ? `Apply preset ${p.name} to clip` : `Add preset ${p.name} as a color layer`,

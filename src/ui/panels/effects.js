@@ -45,7 +45,7 @@ export function effectsTab(ctx) {
       return h('div', hint, tileGrid(list.map((e) => {
         const t = tile({
           label: e.label,
-          preview: lookPreview('effect', e.id),
+          preview: lookPreview('effect', e.id, { cat: e.cat }),
           onAdd: () => {
             const c = target();
             if (c) actions.addClipEffect(c.id, e.id);
@@ -55,7 +55,7 @@ export function effectsTab(ctx) {
           drag: { kind: 'effect', id: e.id },
           addLabel: `Add ${e.label} effect`,
         });
-        hoverAnimate(t, 'effect', e.id);
+        hoverAnimate(t, 'effect', e.id, { cat: e.cat });
         return t;
       }), { label: 'Effects' }));
     },

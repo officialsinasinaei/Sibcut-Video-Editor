@@ -39,6 +39,7 @@ function errorScreen(title, message, retry) {
 
 function showHome() {
   view?.dispose?.();
+  library?.backend?.setActiveProject?.(null);
   if (/#(project|review)=/.test(location.hash)) history.replaceState(null, '', `${location.pathname}${location.search}`);
   view = new Home(root, {
     library,
@@ -55,6 +56,7 @@ async function openProject(id, files) {
   let project;
   try {
     project = await library.openProject(id);
+    library?.backend?.setActiveProject?.(id);
   } catch (err) {
     toast(err?.message || "Couldn't open the project.", { kind: 'error' });
     showHome();
@@ -145,14 +147,109 @@ async function leavePage() {
   return true;
 }
 
-function startLocal() {
-  library = new Library(opfsAvailable() ? opfsBackend() : memoryBackend());
+async function handleElectronOpenDialog() {
+  if (!window.projectStorageAPI?.showOpenProjectDialog) return;
+  const res = await window.projectStorageAPI.showOpenProjectDialog();
+  if (!res.canceled && res.filePaths?.[0]) {
+    const filePath = res.filePaths[0];
+    const lower = filePath.toLowerCase();
+    try {
+      if (lower.endsWith('.vsproj')) {
+        const raw = await window.projectStorageAPI.readJSON(null, { absPath: filePath });
+        if (!raw) throw new Error('Could not read project file or file is empty.');
+        const { normalizeProject } = await import('./model/project.js');
+        const project = normalizeProject(raw);
+        await library.saveProject(project);
+        await openProject(project.id);
+        toast(`Opened ${project.name}`);
+      } else if (lower.endsWith('.zip')) {
+        const buffer = await window.projectStorageAPI.readBinary(null, { absPath: filePath });
+        if (!buffer) throw new Error('Could not read bundle file.');
+        const blob = new Blob([buffer], { type: 'application/zip' });
+        await openBundle(blob);
+      } else {
+        toast('Unsupported file type. Please select a .vsproj or .zip file.', { kind: 'error' });
+      }
+    } catch (err) {
+      console.error(err);
+      toast(err?.message || "Couldn't open the project file.", { kind: 'error' });
+    }
+  }
+}
+
+async function handleElectronChangeDir() {
+  if (!window.projectStorageAPI?.setProjectsDir) return;
+  const res = await window.projectStorageAPI.setProjectsDir();
+  if (res && res.dir) {
+    toast(`Projects folder changed to: ${res.dir}`);
+    if (!location.hash.includes('project=')) {
+      showHome();
+    }
+  }
+}
+
+function setupElectronMenuHandlers() {
+  if (!window.projectStorageAPI?.onMenuAction) return;
+  window.projectStorageAPI.onMenuAction(async (action) => {
+    switch (action) {
+      case 'new-project':
+        if (view?.ctx?.newProject) view.ctx.newProject();
+        else createProject({ ratio: 'original' });
+        break;
+      case 'open-project':
+        if (view?.openProjectFileDialog) view.openProjectFileDialog();
+        else handleElectronOpenDialog();
+        break;
+      case 'save-project':
+        if (view?.saver) {
+          await view.saver.save();
+          toast('Project saved');
+        }
+        break;
+      case 'save-project-as':
+        if (view?.saveProjectAs) view.saveProjectAs();
+        break;
+      case 'export-bundle':
+        if (view?.exportBundle) view.exportBundle();
+        break;
+      case 'open-projects-folder':
+        window.projectStorageAPI.openInExplorer();
+        break;
+      case 'change-projects-folder':
+        handleElectronChangeDir();
+        break;
+    }
+  });
+}
+
+async function startLocal() {
+  const isElec = typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron);
+  let backend;
+  if (isElec) {
+    const { electronBackend } = await import('./storage/electron-backend.js');
+    backend = electronBackend();
+  } else if (opfsAvailable()) {
+    backend = opfsBackend();
+  } else {
+    backend = memoryBackend();
+  }
+  library = new Library(backend);
   account = {
     user: null,
     env: 'local',
     picture: null,
     onSignIn: null,
   };
+
+  if (isElec) {
+    const { migrateFromOpfsIfNeeded } = await import('./storage/migration.js');
+    const migrated = await migrateFromOpfsIfNeeded(library, backend).catch(() => 0);
+    if (migrated > 0) {
+      toast(`Restored ${migrated} project${migrated === 1 ? '' : 's'} from previous session`, { kind: 'success' });
+    }
+    setupElectronMenuHandlers();
+  }
+
   route();
 }
 

@@ -231,7 +231,37 @@ export class Home {
     const fileCard = h('button.quick-card.wide', { type: 'button' },
       h('span.quick-icon', lucide(PackageOpen, 20)),
       h('span.quick-text', h('strong', 'Open project file'), h('span', 'Restore a project exported from Video Studio')));
-    fileCard.addEventListener('click', () => this.bundleInput.click());
+    fileCard.addEventListener('click', async () => {
+      if (typeof window !== 'undefined' && window.projectStorageAPI?.showOpenProjectDialog) {
+        const res = await window.projectStorageAPI.showOpenProjectDialog();
+        if (!res.canceled && res.filePaths?.[0]) {
+          const filePath = res.filePaths[0];
+          const lower = filePath.toLowerCase();
+          try {
+            if (lower.endsWith('.vsproj')) {
+              const raw = await window.projectStorageAPI.readJSON(null, { absPath: filePath });
+              if (!raw) throw new Error('Could not read project file or file is empty.');
+              const { normalizeProject } = await import('../model/project.js');
+              const project = normalizeProject(raw);
+              await this.library.saveProject(project);
+              this.onOpen(project.id);
+            } else if (lower.endsWith('.zip')) {
+              const buffer = await window.projectStorageAPI.readBinary(null, { absPath: filePath });
+              if (!buffer) throw new Error('Could not read bundle file.');
+              const blob = new Blob([buffer], { type: 'application/zip' });
+              this.importBundles([blob]);
+            } else {
+              toast('Unsupported file type. Please select a .vsproj or .zip file.', { kind: 'error' });
+            }
+          } catch (err) {
+            console.error(err);
+            toast(err?.message || "Couldn't open the project file.", { kind: 'error' });
+          }
+        }
+      } else {
+        this.bundleInput.click();
+      }
+    });
     const tplCard = h('button.quick-card.wide', { type: 'button' },
       h('span.quick-icon', lucide(LayoutTemplate, 20)),
       h('span.quick-text', h('strong', 'Browse templates'), h('span', `${TEMPLATES.length} ready-made projects to make your own`)));
@@ -285,13 +315,21 @@ export class Home {
       this.renderGrid();
     });
     syncView();
+    const isElec = typeof window !== 'undefined' && Boolean(window.projectStorageAPI?.isElectron);
+    const openFolderBtn = isElec
+      ? h('button.btn.small.ghost', { type: 'button', 'data-tip': 'Open Projects folder in Windows Explorer' }, icon('folderOpen', 14), h('span.sort-label', 'Open folder'))
+      : null;
+    if (openFolderBtn) {
+      openFolderBtn.addEventListener('click', () => window.projectStorageAPI.openInExplorer());
+    }
     const moreBtn = h('button.icon-btn', { type: 'button', 'aria-label': 'More project actions', 'data-tip': 'More' }, icon('more', 16));
     menuButton(moreBtn, () => [
-      { label: 'Open project file...', icon: 'folderOpen', onSelect: () => this.bundleInput.click() },
+      { label: 'Open project file...', icon: 'folderOpen', onSelect: () => fileCard.click() },
+      isElec ? { label: 'Open Projects folder in Explorer', icon: 'folderOpen', onSelect: () => window.projectStorageAPI.openInExplorer() } : null,
       { label: 'Import media...', icon: 'import', onSelect: () => this.importInput.click() },
       'separator',
       { label: `Trash${this.trash.length ? ` (${this.trash.length})` : ''}`, icon: 'trash', onSelect: () => this.show('trash') },
-    ], { align: 'end', label: 'More project actions' });
+    ].filter(Boolean), { align: 'end', label: 'More project actions' });
 
     this.grid = h('div.project-grid', { role: 'list', 'aria-label': 'Projects' });
     this.count = h('span.home-count');
@@ -305,7 +343,7 @@ export class Home {
         h('div.section-head', h('h2#tpl-strip-h', 'Start from a template'), allTemplates),
         strip),
       h('section.home-section', { 'aria-labelledby': 'projects-h' },
-        h('div.section-head', h('h2#projects-h', 'Recent projects ', this.count), h('div.section-tools', h('div.search-wrap', icon('search', 14), search), sortBtn, viewBtn, moreBtn)),
+        h('div.section-head', h('h2#projects-h', 'Recent projects ', this.count), h('div.section-tools', h('div.search-wrap', icon('search', 14), search), sortBtn, viewBtn, openFolderBtn, moreBtn)),
         this.grid));
     this.renderGrid();
     return section;

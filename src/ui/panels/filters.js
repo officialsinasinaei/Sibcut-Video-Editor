@@ -28,17 +28,17 @@ export function filtersTab(ctx) {
       const tiles = list.map((f) => {
         const t = tile({
           label: f.label,
-          preview: lookPreview('filter', f.id),
+          preview: lookPreview('filter', f.id, { cat: f.cat }),
           active: clip?.filter?.id === f.id,
           onAdd: () => actions.addFilter(f.id),
           drag: { kind: 'filter', id: f.id },
           addLabel: clip ? `Apply ${f.label} filter to clip` : `Add ${f.label} filter`,
         });
-        hoverAnimate(t, 'filter', f.id);
+        hoverAnimate(t, 'filter', f.id, { cat: f.cat });
         return t;
       });
       if (clip?.filter) {
-        tiles.unshift(tile({ label: 'None', preview: lookPreview('none', 'none'), onAdd: () => actions.addFilter(null), addLabel: 'Remove filter from clip' }));
+        tiles.unshift(tile({ label: 'None', preview: lookPreview('none', 'none', { cat: 'featured' }), onAdd: () => actions.addFilter(null), addLabel: 'Remove filter from clip' }));
       }
       return h('div', hint, tileGrid(tiles, { label: 'Filters' }));
     },

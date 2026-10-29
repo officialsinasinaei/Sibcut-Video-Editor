@@ -11,4 +11,8 @@ build/icon.ico
 *.zip
 tools/test-*.cjs
 tools/verify-*.cjs
+data/
+Projects/
+imagesfororganizing/
+screenshot-*.png
 

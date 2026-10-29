@@ -37,13 +37,13 @@ export function transitionView(view) {
     const grid = choiceGrid({
       label: `${cat.label} transitions`,
       className: 'tr-grid',
-      items: items.map((t) => ({ id: t.id, label: t.label, preview: lookPreview('transition', t.id, { progress: 0.5 }) })),
+      items: items.map((t) => ({ id: t.id, label: t.label, preview: lookPreview('transition', t.id, { progress: 0.5, cat: t.cat }) })),
       value: view.clip?.transition?.id,
       onPick: (id) => {
         actions.applyTransition(id, { clipId: view.id, duration: view.clip?.transition?.duration });
       },
     });
-    grid.buttons.forEach((b, i) => hoverAnimate(b, 'transition', items[i].id));
+    grid.buttons.forEach((b, i) => hoverAnimate(b, 'transition', items[i].id, { cat: items[i].cat }));
     return { cat, grid };
   });
 

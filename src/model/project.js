@@ -495,6 +495,7 @@ export function normalizeAsset(a) {
     added: int(a.added, Date.now()),
     origin: str(a.origin),
     ...(a.reversedOf ? { reversedOf: str(a.reversedOf) } : {}),
+    ...(typeof a.localPath === 'string' && a.localPath ? { localPath: a.localPath } : {}),
     // Media bin folder (see model/bins.js); checked against project.bins in normalizeProject.
     ...(typeof a.folder === 'string' && a.folder ? { folder: a.folder.slice(0, 64) } : {}),
   };
