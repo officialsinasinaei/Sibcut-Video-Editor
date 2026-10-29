@@ -7,6 +7,7 @@ import { announce, h } from '../lib/dom.js';
 import { makeClip, DEFAULT_TEXT_STYLE } from '../model/project.js';
 import { normalizeGrade } from '../model/color.js';
 import { TEXT_PRESETS, EFFECTS, FILTERS, TRANSITIONS } from '../model/catalog.js';
+import { effectParamDefs, clampEffectParam } from '../model/effect-params.js';
 import { setKey, removeKey, keyIndexAt, valueAt, baseValue, setBaseValue } from '../model/keyframes.js';
 import { isMultiColorSticker } from '../engine/stickers.js';
 import { findTextLook } from '../model/text-presets.js';
@@ -332,9 +333,21 @@ export function createActions(ctx) {
       const ok = actions.editClip(id, opts.label || 'Edit', (c) => {
         const local = Math.round(at() - c.start);
         const tol = Math.round(US / store.fps / 2);
-        if (!c.keyframes?.[prop]?.length) setBaseValue(c, prop, value);
-        else if (local >= 0 && local <= c.duration) setKey(c.keyframes, prop, local, value, 'linear', tol);
-        else {
+        if (!c.keyframes?.[prop]?.length) {
+          setBaseValue(c, prop, value);
+        } else if (local >= 0 && local <= c.duration) {
+          let val = value;
+          if (prop.startsWith('params.')) {
+            const key = prop.slice(7);
+            if (c.effect) val = clampEffectParam(c.effect, key, val) ?? val;
+          } else {
+            const fx = /^fx(\d+)\.(.+)$/.exec(prop);
+            if (fx && c.effects?.[Number(fx[1])]) {
+              val = clampEffectParam(c.effects[Number(fx[1])].id, fx[2], val) ?? val;
+            }
+          }
+          setKey(c.keyframes, prop, local, val, 'linear', tol);
+        } else {
           off = true;
           return false;
         }
@@ -392,11 +405,14 @@ export function createActions(ctx) {
       const c = s.clip;
       const local = Math.round(at() - c.start);
       if (local < 0 || local > c.duration) return;
-      const props = 'transform' in c ? ['x', 'y', 'scale', 'rotation', 'opacity'] : 'volume' in c ? ['volume'] : [];
+      const props = 'transform' in c ? ['x', 'y', 'scale', 'rotation', 'opacity']
+        : c.effect ? effectParamDefs(c.effect).filter((d) => d.type !== 'color').map((d) => `params.${d.key}`)
+        : 'volume' in c ? ['volume'] : [];
       if (!props.length) return;
       actions.editClip(c.id, 'Add keyframe', (clip) => {
+        clip.keyframes ||= {};
         for (const prop of props) {
-          const base = prop === 'opacity' ? clip.opacity : prop === 'volume' ? clip.volume : clip.transform[prop];
+          const base = baseValue(clip, prop);
           setKey(clip.keyframes, prop, local, valueAt(clip.keyframes, prop, local, base), 'linear', Math.round(US / store.fps / 2));
         }
       });

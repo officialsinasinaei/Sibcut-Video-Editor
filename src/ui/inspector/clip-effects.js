@@ -24,6 +24,7 @@ export function scopedView(view) {
     bind: { value: (fn, opts) => scope.bind(fn, opts) },
   });
   view.bind(() => scope.update());
+  view.bind(() => scope.tick(), { time: true });
   return {
     view: sub,
     reset() {
@@ -40,10 +41,20 @@ export function scopedView(view) {
 export function effectParamFields(view, { id, getParams, setParam, keyPrefix, title = effectLabel(id) }) {
   return effectParamDefs(id).map((d) => {
     const label = `${title}: ${d.label.toLowerCase()}`;
+    const prop = keyPrefix ? `${keyPrefix}.${d.key}` : `params.${d.key}`;
     const value = (c) => getParams(c)?.[d.key] ?? d.def;
     const set = (v, final) => view.edit(label, (c) => setParam(c, d.key, v), { key: `${keyPrefix}-${d.key}`, final });
     if (d.type === 'color') return color(view, { label: d.label, get: value, set }).el;
-    return slider(view, { label: d.label, min: d.min, max: d.max, step: d.step || 1, unit: d.unit || '', get: (c) => Number(value(c)), set }).el;
+    return slider(view, {
+      label: d.label,
+      min: d.min,
+      max: d.max,
+      step: d.step || 1,
+      unit: d.unit || '',
+      prop,
+      get: (c) => Number(view.valueOf ? view.valueOf(prop) : value(c)),
+      set: (v, final) => (view.animate ? view.animate(prop, v, { label, final, key: prop }) : set(v, final)),
+    }).el;
   });
 }
 
@@ -94,14 +105,14 @@ export function clipEffectsTab(view) {
     const fields = effectParamFields(scoped.view, {
       id: e.id,
       title: name,
-      keyPrefix: `cfx-${i}`,
+      keyPrefix: `fx${i}`,
       getParams: (c) => (c.effects?.[i]?.id === e.id ? c.effects[i].params : null),
       setParam: (c, key, v) => (c.effects?.[i]?.id === e.id ? setClipEffectParam(c, i, key, v) : false),
     });
     return h(`div.clipfx-item${e.off ? '.off' : ''}`, { role: 'listitem', 'aria-label': `${i + 1}. ${name}${e.off ? ', off' : ''}` }, head, h('div.clipfx-params', fields));
   };
 
-  let sig = null;
+  let lastFx = null;
   const render = () => {
     const c = view.clip;
     if (!c) return;
@@ -109,9 +120,9 @@ export function clipEffectsTab(view) {
     count.textContent = `${fx.length} of ${MAX_CLIP_EFFECTS}`;
     picker.disabled = fx.length >= MAX_CLIP_EFFECTS;
     clearAll.hidden = !fx.length;
-    const s = fx.map((e) => `${e.id}:${e.off ? 0 : 1}`).join('|');
-    if (s === sig) return;
-    sig = s;
+    const same = lastFx && lastFx.length === fx.length && fx.every((e, i) => e === lastFx[i].ref && Boolean(e.off) === lastFx[i].off);
+    if (same) return;
+    lastFx = fx.map((e) => ({ id: e.id, off: Boolean(e.off), ref: e }));
     scoped.reset();
     list.replaceChildren(...(fx.length
       ? fx.map((e, i) => item(e, i, fx.length))

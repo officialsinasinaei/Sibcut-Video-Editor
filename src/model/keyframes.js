@@ -4,6 +4,8 @@
  * names how the value travels from this key to the next.
  */
 
+import { effectParamDefs, clampEffectParam } from './effect-params.js';
+
 export const KEYFRAME_PROPS = ['x', 'y', 'scale', 'rotation', 'opacity', 'volume'];
 
 /**
@@ -12,8 +14,30 @@ export const KEYFRAME_PROPS = ['x', 'y', 'scale', 'rotation', 'opacity', 'volume
  * animatable prop.
  */
 export function baseValue(clip, prop) {
+  if (!clip) return 0;
   if (prop.startsWith('adjust.')) return clip.adjust?.[prop.slice(7)] ?? 0;
   if (prop === 'opacity' || prop === 'volume') return clip[prop];
+  if (prop.startsWith('params.')) {
+    const key = prop.slice(7);
+    if (clip.params && Object.hasOwn(clip.params, key)) return clip.params[key];
+    if (clip.effect) {
+      const def = effectParamDefs(clip.effect)?.find((d) => d.key === key);
+      if (def) return def.def;
+    }
+    return 0;
+  }
+  const fx = /^fx(\d+)\.(.+)$/.exec(prop);
+  if (fx) {
+    const idx = Number(fx[1]);
+    const key = fx[2];
+    const effect = clip.effects?.[idx];
+    if (effect?.params && Object.hasOwn(effect.params, key)) return effect.params[key];
+    if (effect?.id) {
+      const def = effectParamDefs(effect.id)?.find((d) => d.key === key);
+      if (def) return def.def;
+    }
+    return 0;
+  }
   const field = dottedField(clip, prop);
   if (field) return field.obj?.[field.key] ?? 0;
   if (prop === 'sx' || prop === 'sy') return clip.transform?.[prop] ?? 1;
@@ -23,13 +47,32 @@ export function baseValue(clip, prop) {
 /**
  * Object and key behind a dotted prop other than adjust.*: mask<i>.<key>
  * reads clip.masks[i], remove<i>.<key> the object removal region i,
+ * params.<key> reads clip.params, fx<i>.<key> reads clip.effects[i].params,
  * <field>.<key> reads clip[field] (relight.angle, ...).
  */
-function dottedField(clip, prop) {
+export function dottedField(clip, prop, create = false) {
+  if (!clip || typeof prop !== 'string') return null;
   const dot = prop.indexOf('.');
   if (dot <= 0) return null;
   const head = prop.slice(0, dot);
   const key = prop.slice(dot + 1);
+
+  if (head === 'params') {
+    if (create && !clip.params) clip.params = {};
+    return { obj: clip.params || null, key };
+  }
+
+  const fx = /^fx(\d+)$/.exec(head);
+  if (fx) {
+    const idx = Number(fx[1]);
+    const effect = clip.effects?.[idx];
+    if (effect) {
+      if (create && !effect.params) effect.params = {};
+      return { obj: effect.params || null, key };
+    }
+    return null;
+  }
+
   const m = /^mask(\d+)$/.exec(head);
   if (m) return { obj: clip.masks?.[Number(m[1])], key };
   const r = /^remove(\d+)$/.exec(head);
@@ -39,13 +82,71 @@ function dottedField(clip, prop) {
 }
 
 export function setBaseValue(clip, prop, value) {
+  if (!clip) return;
   if (prop.startsWith('adjust.')) {
     if (clip.adjust) clip.adjust[prop.slice(7)] = value;
-  } else if (prop === 'opacity' || prop === 'volume') clip[prop] = value;
-  else if (dottedField(clip, prop)) {
-    const f = dottedField(clip, prop);
-    if (f.obj) f.obj[f.key] = value;
-  } else if (clip.transform) clip.transform[prop] = value;
+  } else if (prop === 'opacity' || prop === 'volume') {
+    clip[prop] = value;
+  } else if (prop.startsWith('params.')) {
+    const key = prop.slice(7);
+    clip.params ||= {};
+    const clamped = clip.effect ? (clampEffectParam(clip.effect, key, value) ?? value) : value;
+    clip.params[key] = clamped;
+  } else {
+    const fx = /^fx(\d+)\.(.+)$/.exec(prop);
+    if (fx) {
+      const idx = Number(fx[1]);
+      const key = fx[2];
+      const effect = clip.effects?.[idx];
+      if (effect) {
+        effect.params ||= {};
+        const clamped = clampEffectParam(effect.id, key, value) ?? value;
+        effect.params[key] = clamped;
+      }
+    } else {
+      const f = dottedField(clip, prop, true);
+      if (f?.obj) {
+        f.obj[f.key] = value;
+      } else if (clip.transform) {
+        clip.transform[prop] = value;
+      }
+    }
+  }
+}
+
+/**
+ * Evaluates all parameters of an effect clip at clip-local time local,
+ * applying any keyframes on params.<key>.
+ */
+export function keyedEffectParams(clip, local) {
+  if (!clip?.effect) return clip?.params || {};
+  const defs = effectParamDefs(clip.effect);
+  const out = { ...(clip.params || {}) };
+  for (const d of defs) {
+    if (d.type === 'color') continue;
+    const base = clip.params?.[d.key] ?? d.def;
+    const val = valueAt(clip.keyframes, `params.${d.key}`, local, base);
+    out[d.key] = clampEffectParam(clip.effect, d.key, val) ?? val;
+  }
+  return out;
+}
+
+/**
+ * Evaluates all parameters of a clip's effect at index at clip-local time local,
+ * applying any keyframes on fx<index>.<key>.
+ */
+export function keyedClipEffectParams(clip, index, local) {
+  const e = clip?.effects?.[index];
+  if (!e) return {};
+  const defs = effectParamDefs(e.id);
+  const out = { ...(e.params || {}) };
+  for (const d of defs) {
+    if (d.type === 'color') continue;
+    const base = e.params?.[d.key] ?? d.def;
+    const val = valueAt(clip.keyframes, `fx${index}.${d.key}`, local, base);
+    out[d.key] = clampEffectParam(e.id, d.key, val) ?? val;
+  }
+  return out;
 }
 
 const BACK = 1.70158;

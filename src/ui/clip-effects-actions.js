@@ -5,7 +5,7 @@
 import { announce } from '../lib/dom.js';
 import { EFFECTS } from '../model/catalog.js';
 import * as T from '../model/timeline.js';
-import { MAX_CLIP_EFFECTS, canHaveEffects, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectOn } from '../model/clip-effects.js';
+import { MAX_CLIP_EFFECTS, canHaveEffects, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectOn, clearClipEffects } from '../model/clip-effects.js';
 import { toast } from './dialog.js';
 import { isBodyEffect } from '../model/body-effects.js';
 import { ready } from '../media/segmenter.js';
@@ -63,10 +63,7 @@ export function createClipEffectActions(ctx) {
     },
 
     clearClipEffects(clipId) {
-      return edit(clipId, 'Remove clip effects', (c) => {
-        if (!c.effects?.length) return false;
-        delete c.effects;
-      });
+      return edit(clipId, 'Remove clip effects', (c) => clearClipEffects(c));
     },
   };
 }

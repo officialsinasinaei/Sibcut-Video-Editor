@@ -13,17 +13,39 @@ import { showMenu } from '../menu.js';
 import { EASE_LABELS, easeLabel } from '../organize-actions.js';
 import { openEaseEditor } from '../ease-editor.js';
 
+import { EFFECTS } from '../../model/catalog.js';
+import { effectParamDefs } from '../../model/effect-params.js';
+
 const NAMES = {
   x: 'Position X', y: 'Position Y', scale: 'Scale', rotation: 'Rotation', opacity: 'Opacity', volume: 'Volume',
   'style.colorR': 'Text color (red)', 'style.colorG': 'Text color (green)', 'style.colorB': 'Text color (blue)',
 };
 
 /** Readable name for a keyframe property id. */
-export function propLabel(prop) {
+export function propLabel(prop, clip = null) {
   if (NAMES[prop]) return NAMES[prop];
   const [group, key] = prop.includes('.') ? prop.split('.') : [null, prop];
   const words = (s) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^\w/, (c) => c.toUpperCase());
   if (group === 'adjust') return words(key);
+  if (group === 'params') {
+    if (clip?.effect) {
+      const def = effectParamDefs(clip.effect)?.find((d) => d.key === key);
+      if (def?.label) return def.label;
+    }
+    return words(key);
+  }
+  const fx = group && /^fx(\d+)$/.exec(group);
+  if (fx) {
+    const idx = Number(fx[1]);
+    const effectItem = clip?.effects?.[idx];
+    const effectName = effectItem ? (EFFECTS.find((e) => e.id === effectItem.id)?.label || 'Effect') : `Effect ${idx + 1}`;
+    let paramName = words(key);
+    if (effectItem) {
+      const def = effectParamDefs(effectItem.id)?.find((d) => d.key === key);
+      if (def?.label) paramName = def.label;
+    }
+    return `${effectName}: ${paramName}`;
+  }
   if (group && /^mask\d+$/.test(group)) return `Mask ${Number(group.slice(4)) + 1} ${words(key).toLowerCase()}`;
   if (group && /^remove\d+$/.test(group)) return `Removal region ${Number(group.slice(6)) + 1} ${key === 'x' || key === 'y' ? `position ${key.toUpperCase()}` : words(key).toLowerCase()}`;
   return group ? `${words(group)} ${words(key).toLowerCase()}` : words(key);
@@ -31,11 +53,25 @@ export function propLabel(prop) {
 
 /** Properties a clip can animate from this panel (beyond those already keyed). */
 export function animatableProps(clip) {
+  if (!clip) return [];
   if (clip.type === 'audio') return ['volume'];
   const out = [];
   if (clip.transform) out.push('x', 'y', 'scale', 'rotation', 'opacity');
   if (clip.type === 'video') out.push('volume');
   if (clip.adjust) out.push(...Object.keys(clip.adjust).map((k) => `adjust.${k}`));
+  if (clip.effect) {
+    for (const d of effectParamDefs(clip.effect)) {
+      if (d.type !== 'color') out.push(`params.${d.key}`);
+    }
+  }
+  if (clip.effects?.length) {
+    for (let i = 0; i < clip.effects.length; i++) {
+      const e = clip.effects[i];
+      for (const d of effectParamDefs(e.id)) {
+        if (d.type !== 'color') out.push(`fx${i}.${d.key}`);
+      }
+    }
+  }
   return out;
 }
 
@@ -108,7 +144,7 @@ export function createKeyframePanel(ctx, timeline) {
     const c = store.selected?.clip;
     if (!c) return;
     const have = new Set([...Object.keys(c.keyframes || {}), ...extra]);
-    const items = animatableProps(c).filter((p) => !have.has(p)).map((p) => ({ label: propLabel(p), onSelect: () => addKeyAtPlayhead(c.id, p) }));
+    const items = animatableProps(c).filter((p) => !have.has(p)).map((p) => ({ label: propLabel(p, c), onSelect: () => addKeyAtPlayhead(c.id, p) }));
     showMenu(addBtn, items.length ? items : [{ label: 'Every property already has a lane', disabled: true }], { label: 'Add property' });
   });
 
@@ -122,9 +158,9 @@ export function createKeyframePanel(ctx, timeline) {
       toastOutside();
       return;
     }
-    actions.editClip(clipId, `Add ${propLabel(prop).toLowerCase()} keyframe`, (c) => {
+    actions.editClip(clipId, `Add ${propLabel(prop, f.clip).toLowerCase()} keyframe`, (c) => {
       c.keyframes ||= {};
-      const v = valueAt(c.keyframes, prop, local, baseValue(c, prop) ?? c.keyframes[prop]?.[0]?.v ?? 0);
+      const v = valueAt(c.keyframes, prop, local, baseValue(c, prop) ?? c.keyframes?.[prop]?.[0]?.v ?? 0);
       setKey(c.keyframes, prop, local, v, 'linear', tol());
     });
     extra.add(prop);
@@ -182,14 +218,21 @@ export function createKeyframePanel(ctx, timeline) {
   function build() {
     const s = store.selected;
     const c = s?.clip;
-    if (!c || !c.keyframes) {
+    if (!c) {
       body.replaceChildren();
       empty.hidden = false;
-      empty.textContent = c ? 'This clip has nothing to animate.' : 'Select a clip to see its keyframes.';
+      empty.textContent = 'Select a clip to see its keyframes.';
       title.textContent = 'Keyframes';
       return;
     }
-    empty.hidden = true;
+    const anim = animatableProps(c);
+    if (!anim.length && !c.keyframes) {
+      body.replaceChildren();
+      empty.hidden = false;
+      empty.textContent = 'This clip has nothing to animate.';
+      title.textContent = 'Keyframes';
+      return;
+    }
     title.textContent = `Keyframes: ${T.clipLabel(store.project, c)}`;
     const g = timeline.geometry();
     const props = lanesFor(c);
@@ -199,20 +242,21 @@ export function createKeyframePanel(ctx, timeline) {
       empty.textContent = 'No keyframes yet. Use + Property, or the diamond next to a setting in Details.';
       return;
     }
+    empty.hidden = true;
     const x0 = g.timeToX(c.start) - g.scrollLeft;
     const wpx = (c.duration / US) * g.pps;
     const local = store.time - c.start;
     body.replaceChildren(...props.map((prop) => {
-      const keys = c.keyframes[prop] || [];
+      const keys = c.keyframes?.[prop] || [];
       const atKey = keyIndexAt(c.keyframes, prop, local, tol()) >= 0;
-      const kfBtn = h(`button.icon-btn.small.kf-toggle${atKey ? '.on' : ''}`, { type: 'button', 'aria-pressed': String(atKey), 'aria-label': `${atKey ? 'Remove' : 'Add'} ${propLabel(prop)} keyframe at the playhead`, 'data-tip': atKey ? 'Remove keyframe' : 'Add keyframe' }, icon('keyframe', 12));
+      const kfBtn = h(`button.icon-btn.small.kf-toggle${atKey ? '.on' : ''}`, { type: 'button', 'aria-pressed': String(atKey), 'aria-label': `${atKey ? 'Remove' : 'Add'} ${propLabel(prop, c)} keyframe at the playhead`, 'data-tip': atKey ? 'Remove keyframe' : 'Add keyframe' }, icon('keyframe', 12));
       kfBtn.addEventListener('click', () => {
         if (atKey) actions.editClip(c.id, 'Remove keyframe', (cc) => deleteKey(cc, prop, local, tol()));
         else addKeyAtPlayhead(c.id, prop);
       });
       kfBtn.dataset.nav = 'toggle';
-      const prev = h('button.icon-btn.small', { type: 'button', 'aria-label': `Previous ${propLabel(prop)} keyframe`, 'data-nav': 'prev' }, icon('chevronLeft', 12));
-      const next = h('button.icon-btn.small', { type: 'button', 'aria-label': `Next ${propLabel(prop)} keyframe`, 'data-nav': 'next' }, icon('chevronRight', 12));
+      const prev = h('button.icon-btn.small', { type: 'button', 'aria-label': `Previous ${propLabel(prop, c)} keyframe`, 'data-nav': 'prev' }, icon('chevronLeft', 12));
+      const next = h('button.icon-btn.small', { type: 'button', 'aria-label': `Next ${propLabel(prop, c)} keyframe`, 'data-nav': 'next' }, icon('chevronRight', 12));
       prev.addEventListener('click', () => {
         const k = [...keys].reverse().find((x) => x.t < local - tol());
         if (k) store.seek(c.start + k.t);
@@ -221,7 +265,7 @@ export function createKeyframePanel(ctx, timeline) {
         const k = keys.find((x) => x.t > local + tol());
         if (k) store.seek(c.start + k.t);
       });
-      const label = h('div.kf-label', { style: { width: `${g.headerW}px` } }, h('span.kf-name', { title: propLabel(prop) }, propLabel(prop)), h('span.kf-nav', prev, kfBtn, next));
+      const label = h('div.kf-label', { style: { width: `${g.headerW}px` } }, h('span.kf-name', { title: propLabel(prop, c) }, propLabel(prop, c)), h('span.kf-nav', prev, kfBtn, next));
       const cv = h('canvas.kf-curve', { 'aria-hidden': 'true' });
       const lane = h('div.kf-lane', { 'data-prop': prop },
         h('div.kf-span', { style: { left: `${x0}px`, width: `${Math.max(2, wpx)}px` } }),
@@ -232,7 +276,7 @@ export function createKeyframePanel(ctx, timeline) {
             type: 'button',
             'data-t': String(k.t),
             'data-ease': k.ease || 'linear',
-            'aria-label': `${propLabel(prop)} keyframe at ${timecode(c.start + k.t, store.fps)}, ${easeLabel(k.ease || 'linear')}`,
+            'aria-label': `${propLabel(prop, c)} keyframe at ${timecode(c.start + k.t, store.fps)}, ${easeLabel(k.ease || 'linear')}`,
             style: { left: `${x0 + (k.t / US) * g.pps}px` },
           });
         }),
@@ -255,7 +299,7 @@ export function createKeyframePanel(ctx, timeline) {
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const { lo, hi } = curveRange(c, prop);
-    const base = baseValue(c, prop) ?? c.keyframes[prop]?.[0]?.v ?? 0;
+    const base = baseValue(c, prop) ?? c.keyframes?.[prop]?.[0]?.v ?? 0;
     g.strokeStyle = getComputedStyle(el).getPropertyValue('--accent').trim() || '#4f8ff7';
     g.lineWidth = 1.5;
     g.beginPath();
@@ -352,7 +396,7 @@ export function createKeyframePanel(ctx, timeline) {
       'separator',
       { label: 'Go to keyframe', onSelect: () => store.seek(c.start + t) },
       { label: 'Delete keyframe', icon: 'trash', danger: true, onSelect: () => actions.editClip(c.id, 'Delete keyframe', (cc) => deleteKey(cc, prop, t, tol())) },
-    ], { label: `${propLabel(prop)} keyframe` });
+    ], { label: `${propLabel(prop, c)} keyframe` });
   });
   body.addEventListener('keydown', (e) => {
     const keyEl = e.target.closest?.('.kf-key');

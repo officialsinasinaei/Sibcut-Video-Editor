@@ -11,6 +11,7 @@ import { loudnessGain } from '../model/audio.js';
 import { clipEnd, nextAdjacent, sourceTimeAt } from '../model/timeline.js';
 import { sourceOffset } from '../model/speed-curve.js';
 import { keyedAdjust } from '../model/color.js';
+import { keyedEffectParams } from '../model/keyframes.js';
 import { textColorAt } from '../model/text-style.js';
 import { applyMotion, WHOLE_LOOPS } from './motion-anims.js';
 import { expandProject } from './compound.js';
@@ -212,7 +213,7 @@ export function clipLayer(project, clip, t, trackIndex) {
   // The clip's own effect stack (rendered on this clip only, see engine/fx-render.js),
   // after its style look (model/stylize.js).
   const look = layer.kind === 'media' ? styleEffect(clip.stylize) : null;
-  const fx = look ? [look, ...activeClipEffects(clip)] : activeClipEffects(clip);
+  const fx = look ? [look, ...activeClipEffects(clip, local)] : activeClipEffects(clip, local);
   if (fx.length) {
     layer.effects = fx;
     layer.fxTime = local;
@@ -301,7 +302,7 @@ export function evaluate(project, t, { includeHidden = false } = {}) {
     const clip = binaryClipAt(clips, t);
     if (!clip || clip.disabled || !showsAt(clip, t)) continue;
     if (track.kind === 'effect') {
-      layers.push({ kind: 'effect', clip, effect: clip.effect, params: clip.params, local: t - clip.start, duration: clip.duration, trackIndex: ti });
+      layers.push({ kind: 'effect', clip, effect: clip.effect, params: keyedEffectParams(clip, t - clip.start), local: t - clip.start, duration: clip.duration, trackIndex: ti });
     } else if (track.kind === 'filter') {
       layers.push({ kind: 'filter', clip, filter: clip.filter, intensity: clip.intensity, trackIndex: ti });
     } else if (track.kind === 'adjust') {
