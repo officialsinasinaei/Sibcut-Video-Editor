@@ -18,6 +18,8 @@ import { createTimelineActions } from './timeline-actions.js';
 import { createCommands } from './commands.js';
 import { createTopbar, LAYOUTS } from './topbar.js';
 import { createAssetsPanel } from './panels/index.js';
+import { ExtensionWorkspace } from './extension-workspace.js';
+import { extensionRegistry } from '../extensions/registry.js';
 import { createInspector } from './inspector/index.js';
 import { createPlayerView } from './player-view.js';
 import { createTimeline } from './timeline/timeline.js';
@@ -121,6 +123,8 @@ export class Editor {
         while (store.nest?.length) store.closeCompound();
         return import('./review/share-dialog.js').then((m) => m.openShareDialog(ctx));
       },
+      openExtension: (id) => this.openExtension(id),
+      closeExtension: () => this.closeExtension(),
       exportStill: () => this.exportStill(),
       snapshotToMedia: () => this.exportStill({ toMedia: true }),
       saveNow: async () => {
@@ -176,6 +180,11 @@ export class Editor {
     this.el.append(ctx.history.el);
     ctx.review = createReviewPanel(ctx);
     this.el.append(ctx.review.el);
+    this.extensionWorkspace = new ExtensionWorkspace(ctx, {
+      onReturn: () => this._onExtensionClosed(),
+    });
+    this.el.append(this.extensionWorkspace.el);
+    ctx.extensionWorkspace = this.extensionWorkspace;
     ctx.mobile = createMobileChrome(ctx, this.el);
     root.replaceChildren(this.el);
     root.removeAttribute('aria-busy');
@@ -630,7 +639,26 @@ export class Editor {
     }
   }
 
+  openExtension(id) {
+    const ext = typeof id === 'object' ? id : extensionRegistry.get(id);
+    if (!ext) {
+      toast('Extension not found', { kind: 'error' });
+      return;
+    }
+    this.extensionWorkspace?.open(ext);
+  }
+
+  closeExtension() {
+    this.extensionWorkspace?.close();
+  }
+
+  _onExtensionClosed() {
+    this.ctx.playerView?.relayout?.();
+    this.ctx.timeline?.render?.(true);
+  }
+
   dispose() {
+    this.extensionWorkspace?.dispose?.();
     this._disposed = true;
     this._fitObserver?.disconnect();
     this._offTheme?.();

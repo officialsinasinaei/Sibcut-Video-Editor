@@ -20,7 +20,7 @@ import { filtersTab } from './filters.js';
 import { adjustTab } from './adjust.js';
 import { captionsTab } from './captions.js';
 import { templatesTab } from './templates.js';
-import { avatarsTab } from './avatars.js';
+import { extensionsTab } from './extensions.js';
 
 export { fitTabs };
 
@@ -29,7 +29,7 @@ export const ASSET_TABS = [
   { id: 'audio', label: 'Audio', icon: 'music', make: audioTab },
   { id: 'text', label: 'Text', icon: 'text', make: textTab },
   { id: 'captions', label: 'Captions', icon: 'captions', make: captionsTab },
-  { id: 'avatars', label: 'Avatars', icon: 'avatar', make: avatarsTab },
+  { id: 'extensions', label: 'Extensions', icon: 'blocks', make: extensionsTab },
   { id: 'stickers', label: 'Graphics', icon: 'sticker', make: stickersTab },
   { id: 'transitions', label: 'Transitions', icon: 'transition', make: transitionsTab },
   { id: 'effects', label: 'Effects', icon: 'effects', make: effectsTab },

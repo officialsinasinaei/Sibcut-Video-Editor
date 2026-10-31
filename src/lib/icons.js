@@ -19,7 +19,7 @@ import {
   ScrollText, SwitchCamera, Grid2x2, MessageSquare, MessageSquareShare, Reply, CircleCheck, SendHorizontal, Users, UserMinus,
 } from 'lucide';
 import {
-  SquareUserRound, Paintbrush,
+  SquareUserRound, Paintbrush, Blocks, Puzzle, Boxes,
 } from 'lucide';
 import {
   Paperclip, SquarePen, PanelRightClose, PanelRightOpen, Ban, Minus,
@@ -199,7 +199,7 @@ Object.assign(ICONS, {
 });
 
 // Presenter avatars and style looks.
-Object.assign(ICONS, { avatar: SquareUserRound, stylize: Paintbrush });
+Object.assign(ICONS, { avatar: SquareUserRound, stylize: Paintbrush, extensions: Blocks, blocks: Blocks, puzzle: Puzzle, boxes: Boxes });
 
 // The AI sidebar.
 Object.assign(ICONS, { attach: Paperclip, newChat: SquarePen, panelRightClose: PanelRightClose, panelRightOpen: PanelRightOpen, declined: Ban, minus: Minus });

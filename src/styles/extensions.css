@@ -1,0 +1,371 @@
+/* Extensions Tab & Full-Screen Workspace Styles */
+
+/* Extensions Tab Grid -------------------------------------------------------- */
+.ext-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 14px;
+}
+
+.ext-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.ext-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--t-fast), border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+  user-select: none;
+}
+
+.ext-card:hover {
+  background: var(--bg-elev);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.ext-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ext-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ext-card-icon-wrap {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ext-accent, var(--accent)) 16%, var(--bg-surface));
+  color: var(--ext-accent, var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--ext-accent, var(--accent)) 30%, transparent);
+}
+
+.ext-card-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.ext-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ext-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ext-card-badge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.ext-card-author {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+.ext-card-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+  margin: 0 0 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ext-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.ext-card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ext-card-version {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-base);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.ext-card-category {
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-transform: capitalize;
+}
+
+.ext-open-btn {
+  gap: 4px;
+}
+
+.ext-help-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.ext-help-box .icon {
+  flex: none;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.ext-help-content strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.ext-help-content p {
+  margin: 0;
+  line-height: 1.4;
+  font-size: 11.5px;
+}
+
+/* Full-Screen Extension Workspace -------------------------------------------- */
+.extension-workspace {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-base, #111);
+  overflow: hidden;
+}
+
+.ext-workspace-header {
+  flex: none;
+  height: 48px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  gap: 16px;
+  user-select: none;
+}
+
+.ext-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ext-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  transition: all var(--t-fast);
+}
+
+.ext-back-btn:hover {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--text-bright, #fff);
+}
+
+.ext-header-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+}
+
+.ext-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ext-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.ext-header-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ext-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ext-header-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ext-header-badge {
+  font-size: 9.5px;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.ext-header-tag {
+  font-size: 11px;
+  color: var(--text-3);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ext-header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 400px;
+}
+
+.ext-progress-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ext-progress-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  text-align: center;
+}
+
+.ext-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.ext-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a855f7);
+  border-radius: 99px;
+  transition: width 150ms ease;
+}
+
+.ext-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ext-cancel-btn {
+  color: var(--danger, #ef4444);
+}
+
+.ext-add-timeline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ext-reload-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.ext-workspace-frame-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: calc(100% - 48px);
+  background: #000;
+  overflow: hidden;
+}
+
+.ext-workspace-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  display: block;
+}
