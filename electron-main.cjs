@@ -203,7 +203,14 @@ function startServer() {
 
       // Resolve to a real file, falling back to index.html for SPA routing
       let filePath = path.join(DIST, urlPath);
-      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+        const indexHtml = path.join(filePath, 'index.html');
+        if (fs.existsSync(indexHtml)) {
+          filePath = indexHtml;
+        } else {
+          filePath = path.join(DIST, 'index.html');
+        }
+      } else if (!fs.existsSync(filePath)) {
         if (!path.extname(urlPath)) {
           filePath = path.join(DIST, 'index.html');
         } else {
