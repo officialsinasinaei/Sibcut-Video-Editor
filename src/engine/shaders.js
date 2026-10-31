@@ -237,21 +237,12 @@ float maskAlpha(vec2 uv) {
   if (u_maskOn == 0) return 1.0;
   return texture(u_maskTex, uv).a;
 }
-// The matte is coarse, so each pixel takes it from nearby matte samples that
-// look like it in the full picture (joint bilateral upsampling): edges snap
-// to hair and shoulders instead of the matte's own blocky outline.
+// RVM produces continuous sub-pixel alpha. We sample it directly,
+// adapting smoothly to the edge window (feather & shrink) while preserving
+// fine strand transparency and motion blur.
 float matteRefined(vec2 uv, vec3 rgb) {
-  float acc = 0.0;
-  float wsum = 0.0;
-  for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) {
-    vec2 o = vec2(float(i), float(j));
-    vec2 q = uv + o * u_matteTexel;
-    vec3 d = tap(q).rgb - rgb;
-    float w = exp(-dot(o, o) * 0.22 - dot(d, d) * 28.0);
-    acc += texture(u_matteTex, q).a * w;
-    wsum += w;
-  }
-  return smoothstep(u_matteWin.x, u_matteWin.y, acc / max(wsum, 1e-5));
+  float a = texture(u_matteTex, uv).a;
+  return smoothstep(u_matteWin.x, u_matteWin.y, a);
 }
 float matteAlpha(vec2 uv, vec3 rgb) {
   if (u_cutOn == 0 || u_matteOn == 0) return 1.0;

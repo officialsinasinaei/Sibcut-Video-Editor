@@ -76,6 +76,7 @@ const MIME = {
   '.cube': 'text/plain',
   '.tflite': 'application/octet-stream',
   '.task': 'application/octet-stream',
+  '.onnx': 'application/octet-stream',
   '.zip':  'application/zip',
   '.woff2': 'font/woff2',
   '.woff':  'font/woff',
@@ -389,6 +390,11 @@ function buildMenu() {
           label: 'Save Project As...',
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendMenu('save-project-as'),
+        },
+        {
+          label: 'Export Video...',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => sendMenu('export-video'),
         },
         {
           label: 'Export Project Bundle (.zip)...',

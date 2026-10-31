@@ -64,9 +64,7 @@ export async function openCutoutRefine(ctx, clipId = ctx.store.selected?.clip.id
   const { canvas } = frame;
   const aspect = canvas.width / canvas.height;
   // The model's matte for this frame.
-  const seg = h('canvas', { width: SEG_SIZE, height: SEG_SIZE });
-  seg.getContext('2d').drawImage(canvas, 0, 0, SEG_SIZE, SEG_SIZE);
-  const m = segment(seg);
+  const m = await segment(canvas);
   if (!m) {
     toast('Could not find people in this frame.', { kind: 'error' });
     return;

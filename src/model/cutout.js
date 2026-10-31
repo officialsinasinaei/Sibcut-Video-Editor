@@ -11,7 +11,7 @@
  *    brush diameter as a fraction of the frame height. Keep strokes add to
  *    the person, the others remove; later strokes win where they overlap.
  */
-export const CUTOUT_DEFAULT = Object.freeze({ feather: 25, shrink: 0, smooth: 40 });
+export const CUTOUT_DEFAULT = Object.freeze({ feather: 15, shrink: 0, smooth: 40 });
 
 const num = (v, lo, hi, d) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : d);
 

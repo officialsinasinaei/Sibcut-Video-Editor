@@ -131,7 +131,7 @@ export function openExportDialog(ctx) {
   const hasSound = audibleClips(full).length > 0;
   const hasCaptions = captionCues(full).length > 0;
   if (!BITRATE_LEVELS.some((l) => l.value === s.bitrate)) s.bitrate = DEFAULT_SETTINGS.bitrate;
-  if (!signedIn(ctx)) s.destination = 'device';
+  s.destination = 'device';
   if (!s.video && !s.audio) s.video = true;
 
   let controller = null;

@@ -18,7 +18,7 @@ import { US } from '../lib/time.js';
 import { projectDuration } from '../model/timeline.js';
 import { Compositor } from './compositor.js';
 import { ensureLuts } from './luts.js';
-import { ensureCutout } from './cutout.js';
+import { ensureCutout, ensurePersonMatte } from './cutout.js';
 import { TextCache, fontString } from './text.js';
 import { expandProject } from './compound.js';
 import { evaluate, audibleClips } from './scene.js';
@@ -481,6 +481,12 @@ class FrameRenderer {
   async render(t) {
     const layers = evaluate(this.project, t);
     await this.media.prepare(layers);
+    for (const l of layers) {
+      if (l.kind === 'media' && l.clip && (l.cutout || l.retouch || l.colorTarget)) {
+        const info = this.media.resolved.get(l.clip.id);
+        if (info) await ensurePersonMatte(this.compositor, l, info);
+      }
+    }
     if (!this.compositor.render(layers, { settings: this.project.settings, time: t / US })) throw new Error('WebGL context lost while rendering');
     this.text.sweep();
     await this.media.sweep();

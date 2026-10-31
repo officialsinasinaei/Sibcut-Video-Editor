@@ -212,6 +212,9 @@ function setupElectronMenuHandlers() {
       case 'export-bundle':
         if (view?.exportBundle) view.exportBundle();
         break;
+      case 'export-video':
+        if (view?.ctx?.openExport) view.ctx.openExport();
+        break;
       case 'open-projects-folder':
         window.projectStorageAPI.openInExplorer();
         break;

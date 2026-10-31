@@ -36,32 +36,130 @@ export async function ensureCutout(project, opts) {
   return ok.every(Boolean);
 }
 
-/** Call fn whenever a people model finishes loading (to redraw). */
+const matteListeners = new Set();
+
+function notifyCutoutReady() {
+  for (const fn of matteListeners) {
+    try {
+      fn();
+    } catch {
+      /* listener error */
+    }
+  }
+}
+
+/** Call fn whenever a people model finishes loading or produces a new matte (to redraw). */
 export function onCutoutReady(fn) {
   const a = onSegmenterChange((s) => {
     if (s === 'ready') fn();
   });
   const b = onFaceModelsReady(fn);
+  matteListeners.add(fn);
   return () => {
     a();
     b();
+    matteListeners.delete(fn);
   };
 }
 
 /** Mattes per clip: the frame they were made from and the result. */
 export class MatteCache {
-  constructor() {
+  constructor(onUpdate = null) {
     this.entries = new Map(); // clipId -> { frameKey, raw (model matte), strokes, canvas, version, ... }
     this.input = null;
     this.inputCtx = null;
+    this.pending = new Map(); // clipId -> frameKey
+    this.onUpdate = onUpdate;
   }
 
-  _input() {
-    if (!this.input) {
-      this.input = makeCanvas(SEG_SIZE, SEG_SIZE);
+  _dims(info) {
+    const sw = info?.width || 1280;
+    const sh = info?.height || 720;
+    const aspect = sw / sh;
+    const maxDim = 640;
+    let w, h;
+    if (aspect >= 1) {
+      w = maxDim;
+      h = Math.round(maxDim / aspect);
+    } else {
+      h = maxDim;
+      w = Math.round(maxDim * aspect);
+    }
+    w = Math.max(16, Math.round(w / 2) * 2);
+    h = Math.max(16, Math.round(h / 2) * 2);
+    return { w, h };
+  }
+
+  _input(w, h) {
+    if (!this.input || this.input.width !== w || this.input.height !== h) {
+      this.input = makeCanvas(w, h);
       this.inputCtx = this.input.getContext('2d', { willReadFrequently: true });
     }
     return this.inputCtx;
+  }
+
+  async _runSegment(src, info, recurrentState = null) {
+    const { w, h } = this._dims(info);
+    if (!drawUpright(this._input(w, h), src, w, h)) return null;
+    try {
+      const res = segment(this.input, { width: w, height: h, recurrentState, downsampleRatio: 0.5 });
+      return res instanceof Promise ? await res : res;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }
+
+  async _process(layer, info, frameKey, sec) {
+    const clipId = layer.clip.id;
+    const existing = this.pending.get(clipId);
+    if (existing && existing.frameKey === frameKey) {
+      return existing.promise;
+    }
+
+    const run = async () => {
+      const src = info.source;
+      if (src && typeof src.seeking === 'boolean' && src.seeking) {
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 600);
+          src.addEventListener('seeked', () => { clearTimeout(timer); resolve(); }, { once: true });
+        });
+      }
+      if (src && typeof src.currentTime === 'number' && typeof src.seeking === 'boolean') {
+        const targetSec = (layer.sourceTime || 0) / 1e6;
+        if (Math.abs(src.currentTime - targetSec) > 0.08) {
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 600);
+            src.addEventListener('seeked', () => { clearTimeout(timer); resolve(); }, { once: true });
+          });
+        }
+      }
+      let e = this.entries.get(clipId);
+      const near = Boolean(e && Math.abs(e.sec - sec) < 0.2);
+      const m = await this._runSegment(info.source, info, near ? e?.recurrentState : null);
+      if (!m) return;
+      const steadyNear = near && e?.raw && e.raw.length === m.data.length;
+      const raw = steadyMatte(m.data, steadyNear ? e.raw : null, layer.cutout?.smooth ?? CUTOUT_DEFAULT.smooth);
+      if (!e) {
+        e = { canvas: makeCanvas(m.width, m.height), version: 0, img: null, ov: null, ovFor: null, recurrentState: null };
+        this.entries.set(clipId, e);
+      }
+      Object.assign(e, { frameKey, raw, sec, w: m.width, h: m.height, recurrentState: m.recurrentState || null });
+      const strokes = layer.cutout?.strokes || null;
+      this._compose(e, strokes, info);
+      notifyCutoutReady();
+      this.onUpdate?.();
+    };
+
+    const promise = run();
+    this.pending.set(clipId, { frameKey, promise });
+    try {
+      await promise;
+    } finally {
+      if (this.pending.get(clipId)?.frameKey === frameKey) {
+        this.pending.delete(clipId);
+      }
+    }
   }
 
   /**
@@ -74,6 +172,17 @@ export class MatteCache {
       return null;
     }
     const src = info.source;
+    if (src && typeof src.seeking === 'boolean' && src.seeking) {
+      let e = this.entries.get(layer.clip.id);
+      return e || null;
+    }
+    const targetSec = (layer.sourceTime || 0) / 1e6;
+    if (src && typeof src.currentTime === 'number' && typeof src.seeking === 'boolean') {
+      if (Math.abs(src.currentTime - targetSec) > 0.08) {
+        let e = this.entries.get(layer.clip.id);
+        return e || null;
+      }
+    }
     const { sec, key: frameKey } = frameOf(layer, info);
     const strokes = layer.cutout?.strokes || null;
     let e = this.entries.get(layer.clip.id);
@@ -81,29 +190,28 @@ export class MatteCache {
       if (e.strokes !== strokes) this._compose(e, strokes, info);
       return e;
     }
-    const m = this._segment(src);
-    if (!m) return e || null;
-    // Steady only between neighbouring frames of the same clip.
-    const near = e && Math.abs(e.sec - sec) < 0.2 && e.raw.length === m.data.length;
-    const raw = steadyMatte(m.data, near ? e.raw : null, layer.cutout?.smooth ?? CUTOUT_DEFAULT.smooth);
-    if (!e) {
-      e = { canvas: makeCanvas(m.width, m.height), version: 0, img: null, ov: null, ovFor: null };
-      this.entries.set(layer.clip.id, e);
-    }
-    Object.assign(e, { frameKey, raw, sec, w: m.width, h: m.height });
-    this._compose(e, strokes, info);
-    return e;
+    this._process(layer, info, frameKey, sec);
+    return e || null;
   }
 
-  /** Run the model on a frame; null when it cannot. */
-  _segment(src) {
-    if (!drawUpright(this._input(), src, SEG_SIZE, SEG_SIZE)) return null;
-    try {
-      return segment(this.input);
-    } catch (err) {
-      console.error(err);
-      return null;
+  /** Ensure the matte for a layer is computed and ready (for export and stills). */
+  async ensure(layer, info) {
+    if (segmenterState() !== 'ready') {
+      await ready({ retry: true });
     }
+    const src = info.source;
+    if (src && typeof src.seeking === 'boolean' && src.seeking) {
+      await new Promise((resolve) => src.addEventListener('seeked', resolve, { once: true }));
+    }
+    const { sec, key: frameKey } = frameOf(layer, info);
+    let e = this.entries.get(layer.clip.id);
+    if (e && e.frameKey === frameKey) {
+      const strokes = layer.cutout?.strokes || null;
+      if (e.strokes !== strokes) this._compose(e, strokes, info);
+      return e;
+    }
+    await this._process(layer, info, frameKey, sec);
+    return this.entries.get(layer.clip.id) || null;
   }
 
   /** Hand-painted strokes over the model's matte, written to the matte canvas. */
@@ -130,6 +238,7 @@ export class MatteCache {
 
   dispose() {
     this.entries.clear();
+    this.pending.clear();
   }
 }
 
@@ -143,7 +252,7 @@ export function bindPersonMatte(comp, layer, info) {
   let e;
   if (comp.personMatte) e = comp.personMatte(layer, info);
   else {
-    comp._matteCache ||= new MatteCache();
+    comp._matteCache ||= new MatteCache(() => comp._redraw?.());
     e = comp._matteCache.get(layer, info);
   }
   if (!e) return segmenterState() === 'failed' ? undefined : null;
@@ -152,6 +261,13 @@ export function bindPersonMatte(comp, layer, info) {
   const t = comp._texture({ key: `matte:${layer.clip.id}`, source: e.canvas, width: e.canvas.width, height: e.canvas.height, version: e.version });
   gl.activeTexture(gl.TEXTURE0);
   return t ? { ...t, mw: e.canvas.width, mh: e.canvas.height } : undefined;
+}
+
+/** Ensure the person matte of a layer is ready before drawing (export and stills). */
+export async function ensurePersonMatte(comp, layer, info) {
+  if (comp.personMatte) return comp.personMatte(layer, info);
+  comp._matteCache ||= new MatteCache(() => comp._redraw?.());
+  return comp._matteCache.ensure(layer, info);
 }
 
 /** Set the matte, cutout and retouch uniforms of the layer program for a layer drawn from `info`. */
