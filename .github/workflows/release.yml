@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -23,14 +29,17 @@ jobs:
 
       - name: Verify Tag Matches package.json Version
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          EXPECTED_VERSION="${TAG_NAME#v}"
+          RAW_TAG="${{ github.ref_name }}"
+          if [ -z "$RAW_TAG" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_TAG="${{ github.event.inputs.tag }}"
+          fi
+          EXPECTED_VERSION="${RAW_TAG#v}"
           PKG_VERSION=$(node -p "require('./package.json').version")
-          echo "Release tag: $TAG_NAME"
+          echo "Release tag: $RAW_TAG"
           echo "Expected version: $EXPECTED_VERSION"
           echo "package.json version: $PKG_VERSION"
           if [ "$EXPECTED_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Release tag ($TAG_NAME) does not match package.json version ($PKG_VERSION)!"
+            echo "::error::Release tag ($RAW_TAG) does not match package.json version ($PKG_VERSION)!"
             exit 1
           fi
 
@@ -80,10 +89,6 @@ jobs:
           New-Item -ItemType Directory -Path "dist-release" -Force | Out-Null
           Copy-Item "release/Sibcut-Video-Editor-Setup.exe" -Destination "dist-release/"
           Copy-Item "release/Sibcut-Video-Editor-Portable.exe" -Destination "dist-release/"
-          Get-ChildItem -Path "dist-release" | ForEach-Object {
-            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)" | Out-File -FilePath "dist-release/$($_.Name).sha256" -Encoding utf8
-          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -93,9 +98,17 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    name: Build macOS (DMG & ZIP)
+    name: Build macOS (${{ matrix.arch }})
     needs: validate-version
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+          - os: macos-13
+            arch: x64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -116,7 +129,7 @@ jobs:
         run: npm run build:electron
 
       - name: Package macOS application
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --${{ matrix.arch }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -125,21 +138,15 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Stage and hash macOS artifacts
+      - name: Stage macOS artifacts
         run: |
           mkdir -p dist-release
           find release -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" \) -exec cp {} dist-release/ \;
-          cd dist-release
-          for f in *; do
-            if [ -f "$f" ]; then
-              shasum -a 256 "$f" > "$f.sha256"
-            fi
-          done
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts
+          name: macos-artifacts-${{ matrix.arch }}
           path: dist-release/*
           if-no-files-found: error
 
@@ -172,20 +179,14 @@ jobs:
         run: npm run build:electron
 
       - name: Package Linux applications
-        run: npx electron-builder --linux
+        run: npx electron-builder --linux --x64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Stage and hash Linux artifacts
+      - name: Stage Linux artifacts
         run: |
           mkdir -p dist-release
           find release -maxdepth 1 -type f \( -name "*.AppImage" -o -name "*.deb" \) -exec cp {} dist-release/ \;
-          cd dist-release
-          for f in *; do
-            if [ -f "$f" ]; then
-              sha256sum "$f" > "$f.sha256"
-            fi
-          done
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -205,30 +206,16 @@ jobs:
       - name: Create release bundle directory
         run: mkdir -p release-bundle
 
-      - name: Download Windows artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-artifacts
           path: release-bundle
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-artifacts
-          path: release-bundle
-
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-artifacts
-          path: release-bundle
+          merge-multiple: true
 
       - name: Generate master SHA256SUMS.txt and verify
         run: |
           cd release-bundle
-          # Remove individual .sha256 files if any
           rm -f *.sha256
-          # Generate master checksum file for all final release binaries
           sha256sum * > SHA256SUMS.txt
           echo "=== Generated SHA256SUMS.txt ==="
           cat SHA256SUMS.txt
@@ -239,9 +226,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release-bundle/*
-          name: Sibcut Video Editor ${{ github.ref_name }}
+          name: Sibcut Video Editor ${{ github.ref_name || github.event.inputs.tag || 'v1.0.0' }}
+          tag_name: ${{ github.ref_name || github.event.inputs.tag || 'v1.0.0' }}
           body: |
-            ## Sibcut Video Editor ${{ github.ref_name }}
+            ## Sibcut Video Editor ${{ github.ref_name || github.event.inputs.tag || 'v1.0.0' }}
 
             A professional, multi-track, offline-first desktop video editor.
 
@@ -266,7 +254,7 @@ jobs:
             ```
 
             ### Attribution
-            Based on the open-source **Everything** project by **HeyPuter** (https://github.com/HeyPuter/everything).
+            Based on the open-source **Everything** project by **HeyPuter** (https://github.com/HeyPuter/everything).  
             Created and maintained by **Sina Sinaei** (sina9100t@gmail.com).
           draft: false
           prerelease: false
