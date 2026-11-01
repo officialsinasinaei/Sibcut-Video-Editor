@@ -84,7 +84,9 @@
       "electron-projects-ipc.cjs",
       "native/**",
       "src/assets/**",
-      "build/icon.*"
+      "assets/branding/**",
+      "build/icon.*",
+      "build/icons/**"
     ],
     "extraResources": [],
     "win": {
@@ -98,6 +100,14 @@
       ],
       "icon": "build/icon.ico",
       "artifactName": "VideoStudio-Portable.exe"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.video"
+    },
+    "linux": {
+      "icon": "build/icons",
+      "category": "Video"
     },
     "portable": {
       "requestExecutionLevel": "user"

@@ -42,9 +42,24 @@ if (isWritable(userDataDir)) {
   }
 }
 
-// ─── Paths ────────────────────────────────────────────────────────────────────
+// ─── Paths & Icons ────────────────────────────────────────────────────────────
 const DIST = path.join(__dirname, 'dist');
-const ICON = path.join(__dirname, 'build', 'icon.png');
+
+function getAppIconPath() {
+  if (process.platform === 'win32') {
+    const ico = path.join(__dirname, 'build', 'icon.ico');
+    if (fs.existsSync(ico)) return ico;
+    const brandingIco = path.join(__dirname, 'assets', 'branding', 'app-icons', 'windows', 'icon.ico');
+    if (fs.existsSync(brandingIco)) return brandingIco;
+  }
+  const png = path.join(__dirname, 'build', 'icon.png');
+  if (fs.existsSync(png)) return png;
+  const brandingPng = path.join(__dirname, 'assets', 'branding', 'app-icons', 'linux', '512x512.png');
+  if (fs.existsSync(brandingPng)) return brandingPng;
+  const master = path.join(__dirname, 'assets', 'branding', 'master', 'app-icon-master.png');
+  if (fs.existsSync(master)) return master;
+  return undefined;
+}
 
 
 // ─── MIME types ───────────────────────────────────────────────────────────────
@@ -302,7 +317,15 @@ let serverPort = null;
 
 async function createWindow() {
   const state = loadWindowState();
-  const iconPath = fs.existsSync(ICON) ? ICON : undefined;
+  const iconPath = process.platform !== 'darwin' ? getAppIconPath() : undefined;
+
+  // On macOS development mode, set dock icon if unpacked
+  if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
+    const dockIcon = path.join(__dirname, 'build', 'icon.png');
+    if (fs.existsSync(dockIcon)) {
+      try { app.dock.setIcon(dockIcon); } catch {}
+    }
+  }
 
   mainWindow = new BrowserWindow({
     width:    state.width  || 1400,

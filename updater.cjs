@@ -139,6 +139,20 @@ function downloadFile(url, destPath, onProgress) {
   });
 }
 
+function getUpdaterIconPath() {
+  if (process.platform === 'win32') {
+    const ico = path.join(__dirname, 'build', 'icon.ico');
+    if (fs.existsSync(ico)) return ico;
+    const brandingIco = path.join(__dirname, 'assets', 'branding', 'app-icons', 'windows', 'icon.ico');
+    if (fs.existsSync(brandingIco)) return brandingIco;
+  }
+  const png = path.join(__dirname, 'build', 'icon.png');
+  if (fs.existsSync(png)) return png;
+  const brandingPng = path.join(__dirname, 'assets', 'branding', 'app-icons', 'linux', '512x512.png');
+  if (fs.existsSync(brandingPng)) return brandingPng;
+  return undefined;
+}
+
 /**
  * Open the custom Updater Window
  */
@@ -159,6 +173,7 @@ function showUpdateWindow(parentWindow, releaseData) {
     frame: false,
     transparent: true,
     show: false,
+    icon: process.platform !== 'darwin' ? getUpdaterIconPath() : undefined,
     backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: true,
