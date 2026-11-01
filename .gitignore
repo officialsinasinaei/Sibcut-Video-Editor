@@ -1,18 +1,81 @@
-.dev-media
-dist
-node_modules
-wasm/target
-public/worker
-release
-*.exe
-VideoStudio-Portable.exe
-*.mp4
-*.zip
-tools/test-*.cjs
-tools/verify-*.cjs
+# Logs & Debugging
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime User Data & Local Databases
 data/
 Projects/
-imagesfororganizing/
+test-userdata/
+.dev-media/
+
+# Dependencies
+node_modules/
+
+# Production & Packaging Build Outputs
+dist/
+out/
+release/
+build/installer/
+wasm/target/
+public/worker/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+*.blockmap
+
+# Environment & Secrets (Never commit credentials)
+.env
+.env*.local
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.keystore
+
+# Test Coverage & Artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 screenshot-*.png
+
+# Local Verification Scripts & Organizing Directories
+tools/test-*.cjs
+tools/verify-*.cjs
+imagesfororganizing/
 htmlfilestotunntoextention/
 
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+*.tmp
+*.temp
+
+# IDE / Editor Settings
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

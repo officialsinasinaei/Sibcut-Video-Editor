@@ -44,9 +44,9 @@ SOFTWARE.
 **Sibcut Video Editor**
 - **Creator**: Sina Sinaei ([sina9100t@gmail.com](mailto:sina9100t@gmail.com))
 - **Copyright**: Copyright (C) 2026 Sina Sinaei
-- **License**: GNU Affero General Public License v3.0 (AGPL-3.0)
+- **License**: GNU General Public License v3.0 (GPL-3.0)
 
-A copy of the GNU Affero General Public License is available in the [`LICENSE`](./LICENSE) file located in the application root directory.
+A copy of the GNU General Public License is available in the [`LICENSE`](./LICENSE) file located in the application root directory.
 
 ---
 
@@ -65,6 +65,8 @@ The following open-source libraries and components are bundled or used by Sibcut
 | **Vosk API / libvosk** | Apache-2.0 | Offline speech-to-text recognition |
 | **Electron** | MIT | Desktop application runtime framework |
 | **Vite** | MIT | Frontend build tooling |
+
+For the full texts of third-party licenses, see [`THIRD-PARTY-LICENSES.md`](./THIRD-PARTY-LICENSES.md).
 
 ---
 

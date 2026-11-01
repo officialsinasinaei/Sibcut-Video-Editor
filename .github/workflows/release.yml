@@ -1,0 +1,274 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-version:
+    name: Validate Version Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Verify Tag Matches package.json Version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          EXPECTED_VERSION="${TAG_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Release tag: $TAG_NAME"
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "package.json version: $PKG_VERSION"
+          if [ "$EXPECTED_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag ($TAG_NAME) does not match package.json version ($PKG_VERSION)!"
+            exit 1
+          fi
+
+  build-windows:
+    name: Build Windows (Setup & Portable)
+    needs: validate-version
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify licenses
+        run: npm run check:licenses
+
+      - name: Build Electron application
+        run: npm run build:electron
+
+      - name: Package Windows executables
+        run: npx electron-builder --win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Validate Windows release artifacts
+        shell: pwsh
+        run: |
+          $expected = @(
+            "release/Sibcut-Video-Editor-Setup.exe",
+            "release/Sibcut-Video-Editor-Portable.exe"
+          )
+          foreach ($f in $expected) {
+            if (-not (Test-Path $f)) {
+              Write-Error "Required Windows artifact missing: $f"
+              exit 1
+            }
+          }
+          New-Item -ItemType Directory -Path "dist-release" -Force | Out-Null
+          Copy-Item "release/Sibcut-Video-Editor-Setup.exe" -Destination "dist-release/"
+          Copy-Item "release/Sibcut-Video-Editor-Portable.exe" -Destination "dist-release/"
+          Get-ChildItem -Path "dist-release" | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -FilePath "dist-release/$($_.Name).sha256" -Encoding utf8
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist-release/*
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (DMG & ZIP)
+    needs: validate-version
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify licenses
+        run: npm run check:licenses
+
+      - name: Build Electron application
+        run: npm run build:electron
+
+      - name: Package macOS application
+        run: npx electron-builder --mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Stage and hash macOS artifacts
+        run: |
+          mkdir -p dist-release
+          find release -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" \) -exec cp {} dist-release/ \;
+          cd dist-release
+          for f in *; do
+            if [ -f "$f" ]; then
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist-release/*
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux (AppImage & DEB)
+    needs: validate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxext-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify licenses
+        run: npm run check:licenses
+
+      - name: Build Electron application
+        run: npm run build:electron
+
+      - name: Package Linux applications
+        run: npx electron-builder --linux
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Stage and hash Linux artifacts
+        run: |
+          mkdir -p dist-release
+          find release -maxdepth 1 -type f \( -name "*.AppImage" -o -name "*.deb" \) -exec cp {} dist-release/ \;
+          cd dist-release
+          for f in *; do
+            if [ -f "$f" ]; then
+              sha256sum "$f" > "$f.sha256"
+            fi
+          done
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist-release/*
+          if-no-files-found: error
+
+  publish:
+    name: Aggregate Checksums & Publish GitHub Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create release bundle directory
+        run: mkdir -p release-bundle
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: release-bundle
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+          path: release-bundle
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts
+          path: release-bundle
+
+      - name: Generate master SHA256SUMS.txt and verify
+        run: |
+          cd release-bundle
+          # Remove individual .sha256 files if any
+          rm -f *.sha256
+          # Generate master checksum file for all final release binaries
+          sha256sum * > SHA256SUMS.txt
+          echo "=== Generated SHA256SUMS.txt ==="
+          cat SHA256SUMS.txt
+          echo "=== Verifying Checksums ==="
+          sha256sum --check SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-bundle/*
+          name: Sibcut Video Editor ${{ github.ref_name }}
+          body: |
+            ## Sibcut Video Editor ${{ github.ref_name }}
+
+            A professional, multi-track, offline-first desktop video editor.
+
+            ### Downloads
+
+            | Platform | Architecture | Download File | Description |
+            |---|---|---|---|
+            | **Windows** | x64 | **`Sibcut-Video-Editor-Setup.exe`** | **Recommended installer** (Start menu, desktop shortcuts, uninstaller) |
+            | **Windows** | x64 | `Sibcut-Video-Editor-Portable.exe` | Standalone portable (no installation, run anywhere/USB) |
+            | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.dmg` | Disk image for M1/M2/M3/M4 Macs |
+            | **macOS** | Intel (`x64`) | `Sibcut-Video-Editor-macOS-x64.dmg` | Disk image for Intel Macs |
+            | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.zip` | Standalone application bundle archive |
+            | **macOS** | Intel (`x64`) | `Sibcut-Video-Editor-macOS-x64.zip` | Standalone application bundle archive |
+            | **Linux** | x64 | **`Sibcut-Video-Editor-Linux-x64.AppImage`** | **Recommended Linux download** (runs directly on all distros) |
+            | **Linux** | x64 | `Sibcut-Video-Editor-Linux-x64.deb` | Debian / Ubuntu / Linux Mint package |
+
+            ### Verification
+            Every download can be verified using the accompanying `SHA256SUMS.txt` file.
+
+            ```bash
+            sha256sum --check SHA256SUMS.txt
+            ```
+
+            ### Attribution
+            Based on the open-source **Everything** project by **HeyPuter** (https://github.com/HeyPuter/everything).
+            Created and maintained by **Sina Sinaei** (sina9100t@gmail.com).
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

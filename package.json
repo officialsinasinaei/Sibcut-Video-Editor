@@ -4,9 +4,16 @@
   "description": "Sibcut Video Editor: a professional multi-track video editor. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored locally on your device.",
   "type": "module",
   "private": true,
-  "author": "Sina Sinaei",
-  "homepage": "https://github.com/officialsinasinaei/Cupcut-Video-Editor",
-  "license": "AGPL-3.0-only",
+  "author": "Sina Sinaei <sina9100t@gmail.com>",
+  "homepage": "https://github.com/officialsinasinaei/Sibcut-Video-Editor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/officialsinasinaei/Sibcut-Video-Editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/officialsinasinaei/Sibcut-Video-Editor/issues"
+  },
+  "license": "GPL-3.0-only",
   "engines": {
     "node": ">=22.12"
   },
@@ -23,7 +30,11 @@
     "prebuild": "npm run check:licenses",
     "build:electron": "npm run build:worker && vite build --config vite.electron.config.js",
     "electron:dev": "npm run build:electron && electron .",
-    "electron:pack": "npm run build:electron && electron-builder --win portable"
+    "electron:pack": "npm run build:electron && electron-builder --win",
+    "electron:pack:portable": "npm run build:electron && electron-builder --win portable",
+    "electron:pack:installer": "npm run build:electron && electron-builder --win nsis",
+    "electron:pack:mac": "npm run build:electron && electron-builder --mac",
+    "electron:pack:linux": "npm run build:electron && electron-builder --linux"
   },
   "dependencies": {
     "@fontsource/amiri": "^5.3.0",
@@ -65,8 +76,9 @@
     "vitest": "5.0.3"
   },
   "build": {
-    "appId": "com.videostudio.app",
+    "appId": "com.sinasinaei.sibcutvideoeditor",
     "productName": "Sibcut Video Editor",
+    "executableName": "Sibcut Video Editor",
     "copyright": "Copyright © 2026 Sina Sinaei",
     "asar": true,
     "asarUnpack": [
@@ -91,27 +103,99 @@
     ],
     "extraResources": [],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
         {
           "target": "portable",
           "arch": [
             "x64"
           ]
         }
-      ],
-      "icon": "build/icon.ico",
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sibcut Video Editor",
+      "uninstallDisplayName": "Sibcut Video Editor",
+      "artifactName": "Sibcut-Video-Editor-Setup.${ext}"
+    },
+    "portable": {
+      "requestExecutionLevel": "user",
       "artifactName": "Sibcut-Video-Editor-Portable.exe"
     },
     "mac": {
       "icon": "build/icon.icns",
-      "category": "public.app-category.video"
+      "category": "public.app-category.video",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Sibcut-Video-Editor-macOS-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Sibcut Video Editor",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "linux": {
       "icon": "build/icons",
-      "category": "Video"
+      "category": "Video",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "maintainer": "Sina Sinaei <sina9100t@gmail.com>",
+      "synopsis": "Professional multi-track video editor",
+      "description": "Sibcut Video Editor: a professional multi-track video editor with timeline editing, text, effects, transitions, filters, keyframes, captions and export, running locally on your device."
     },
-    "portable": {
-      "requestExecutionLevel": "user"
+    "appImage": {
+      "artifactName": "Sibcut-Video-Editor-Linux-${arch}.AppImage"
+    },
+    "deb": {
+      "artifactName": "Sibcut-Video-Editor-Linux-${arch}.deb"
     },
     "directories": {
       "output": "release",

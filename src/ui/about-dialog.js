@@ -53,18 +53,18 @@ SOFTWARE.`)
     h('div.license-block',
       h('h3.license-heading', 'Sibcut Video Editor Application License'),
       h('p.license-sub', `${APP_NAME} — Created by ${CREATOR_NAME}`),
-      h('p.license-meta', 'License: GNU Affero General Public License v3.0 (AGPL-3.0)'),
+      h('p.license-meta', 'License: GNU General Public License v3.0 (GPL-3.0)'),
       h('pre.license-text', `Copyright (C) 2026 ${CREATOR_NAME}
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
+it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.`)
+GNU General Public License for more details.`)
     ),
     h('div.license-block',
       h('h3.license-heading', 'Third-Party Components & Libraries'),
