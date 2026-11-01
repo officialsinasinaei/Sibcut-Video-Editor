@@ -96,17 +96,9 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    name: Build macOS (${{ matrix.arch }})
+    name: Build macOS (Apple Silicon arm64)
     needs: validate-version
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-13
-            arch: x64
+    runs-on: macos-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -127,7 +119,7 @@ jobs:
         run: npm run build:electron
 
       - name: Package macOS application
-        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        run: npx electron-builder --mac --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -139,7 +131,7 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts-${{ matrix.arch }}
+          name: macos-artifacts
           path: dist-release/*
           if-no-files-found: error
 
@@ -232,10 +224,8 @@ jobs:
             |---|---|---|---|
             | **Windows** | x64 | **`Sibcut-Video-Editor-Setup.exe`** | **Recommended installer** (Start menu, desktop shortcuts, uninstaller) |
             | **Windows** | x64 | `Sibcut-Video-Editor-Portable.exe` | Standalone portable (no installation, run anywhere/USB) |
-            | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.dmg` | Disk image for M1/M2/M3/M4 Macs |
-            | **macOS** | Intel (`x64`) | `Sibcut-Video-Editor-macOS-x64.dmg` | Disk image for Intel Macs |
+            | **macOS** | Apple Silicon (`arm64`) | **`Sibcut-Video-Editor-macOS-arm64.dmg`** | **Recommended macOS download** (M1/M2/M3/M4 Macs) |
             | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.zip` | Standalone application bundle archive |
-            | **macOS** | Intel (`x64`) | `Sibcut-Video-Editor-macOS-x64.zip` | Standalone application bundle archive |
             | **Linux** | x64 | **`Sibcut-Video-Editor-Linux-x64.AppImage`** | **Recommended Linux download** (runs directly on all distros) |
             | **Linux** | x64 | `Sibcut-Video-Editor-Linux-x64.deb` | Debian / Ubuntu / Linux Mint package |
 
