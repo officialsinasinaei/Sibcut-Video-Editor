@@ -67,11 +67,9 @@ jobs:
         run: npm run build:electron
 
       - name: Package Windows executables
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Validate Windows release artifacts
         shell: pwsh
@@ -129,14 +127,9 @@ jobs:
         run: npm run build:electron
 
       - name: Package macOS application
-        run: npx electron-builder --mac --${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Stage macOS artifacts
         run: |
@@ -179,7 +172,7 @@ jobs:
         run: npm run build:electron
 
       - name: Package Linux applications
-        run: npx electron-builder --linux --x64
+        run: npx electron-builder --linux --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
