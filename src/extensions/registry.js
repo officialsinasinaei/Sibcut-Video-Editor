@@ -10,6 +10,7 @@ export const EXTENSION_CATEGORIES = [
   { id: 'graphics', label: 'Overlays & Graphics', icon: 'sticker' },
   { id: 'fx', label: 'Visual Effects', icon: 'effects' },
   { id: 'tools', label: 'Tools & Utilities', icon: 'wand' },
+  { id: 'guide', label: 'Developer Guide', icon: 'bookOpen' },
 ];
 
 /** Built-in extensions provided out of the box */
@@ -45,8 +46,32 @@ export const BUILTIN_EXTENSIONS = [
 class ExtensionRegistry {
   constructor() {
     this._extensions = new Map();
+    this._listeners = new Set();
     for (const ext of BUILTIN_EXTENSIONS) {
-      this._extensions.set(ext.id, ext);
+      this._extensions.set(ext.id, { ...ext, isCustom: false });
+    }
+  }
+
+  /**
+   * Subscribe to registry changes (new extension registered or removed).
+   * @param {Function} listener 
+   * @returns {Function} unsubscribe function
+   */
+  subscribe(listener) {
+    if (typeof listener === 'function') {
+      this._listeners.add(listener);
+      return () => this._listeners.delete(listener);
+    }
+    return () => {};
+  }
+
+  _notify() {
+    for (const listener of this._listeners) {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[ExtensionRegistry Listener Error]', err);
+      }
     }
   }
 
@@ -58,11 +83,14 @@ class ExtensionRegistry {
     if (!extension || !extension.id) {
       throw new Error('Extension must provide a valid id.');
     }
+    const isBuiltin = BUILTIN_EXTENSIONS.some((b) => b.id === extension.id);
     this._extensions.set(extension.id, {
       ...extension,
       version: extension.version || '1.0.0',
       capabilities: extension.capabilities || ['export-video'],
+      isCustom: extension.isCustom !== undefined ? extension.isCustom : !isBuiltin,
     });
+    this._notify();
   }
 
   /**
@@ -70,7 +98,11 @@ class ExtensionRegistry {
    * @param {string} id
    */
   unregister(id) {
-    return this._extensions.delete(id);
+    const deleted = this._extensions.delete(id);
+    if (deleted) {
+      this._notify();
+    }
+    return deleted;
   }
 
   /**
@@ -95,6 +127,8 @@ class ExtensionRegistry {
   filter({ category = 'all', query = '' } = {}) {
     const q = (query || '').trim().toLowerCase();
     return this.getAll().filter((ext) => {
+      // Guide is a special view rather than a card filter
+      if (category === 'guide') return false;
       const matchCat = category === 'all' || ext.category === category;
       if (!matchCat) return false;
       if (!q) return true;
