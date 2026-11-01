@@ -1281,3 +1281,217 @@
 .tooltip-key {
   color: #a8a8b2;
 }
+
+/* Enhanced About Dialog & Licenses Modal */
+.about-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.about-logo-frame {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.about-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.about-app-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.about-version-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-2);
+  margin: 2px 0 4px;
+}
+
+.about-tagline {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.about-divider {
+  height: 1px;
+  background: var(--border-soft, rgba(255, 255, 255, 0.08));
+  width: 100%;
+}
+
+.about-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.about-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.about-section-value {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.about-creator-name {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.about-contact-row,
+.about-github-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.about-contact-label {
+  color: var(--text-3);
+}
+
+.about-link {
+  color: var(--accent-text, #38bdf8);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s ease;
+}
+
+.about-link:hover {
+  text-decoration: underline;
+}
+
+.about-link-icon {
+  display: inline-flex;
+  opacity: 0.8;
+}
+
+.about-original-attribution {
+  font-size: 13px;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.about-footer-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.about-licenses-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.about-copyright {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.licenses-modal .dialog-body {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.licenses-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.license-block {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft, rgba(255, 255, 255, 0.08));
+}
+
+.license-block:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.license-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0 0 4px;
+}
+
+.license-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 4px;
+}
+
+.license-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+
+.license-url {
+  color: var(--accent-text, #38bdf8);
+  text-decoration: none;
+}
+
+.license-url:hover {
+  text-decoration: underline;
+}
+
+.license-text {
+  background: var(--bg-surface, rgba(0, 0, 0, 0.35));
+  padding: 12px;
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.06));
+}
+
+.license-list {
+  margin: 8px 0 0 16px;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.7;
+}

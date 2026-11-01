@@ -7,6 +7,7 @@ import './styles/home.css';
 import './styles/responsive.css';
 import { h } from './lib/dom.js';
 import { icon, appIcon } from './lib/icons.js';
+import { openAboutDialog } from './ui/about-dialog.js';
 import { applyTheme } from './ui/prefs.js';
 import { Library } from './storage/library.js';
 import { opfsBackend, opfsAvailable, memoryBackend } from './storage/backends.js';
@@ -220,6 +221,9 @@ function setupElectronMenuHandlers() {
         break;
       case 'change-projects-folder':
         handleElectronChangeDir();
+        break;
+      case 'about':
+        openAboutDialog();
         break;
     }
   });

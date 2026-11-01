@@ -1,4 +1,4 @@
-# Video Studio
+# Sibcut Video Editor
 
 A high-performance, multi-track desktop video editor — a fast, private, portable alternative to CapCut. Trim and arrange clips on a timeline, add text, graphics, effects, filters, transitions, keyframed motion, and export finished videos. Operates 100% locally with zero cloud dependencies; all projects and media stay securely on your device.
 
@@ -18,7 +18,7 @@ The editor provides an assets panel, video player and inspector panel on top, wi
 - **Player**: Real-time WebGL2 playback, zoom/pan, safe zones, rulers, guides, and snapshot capture to media.
 - **Proxy media**: Smooth editing of 4K and heavy footage with background 720p proxy generation into local device storage.
 - **Export**: Full project, in/out range or selection; H.264, HEVC, VP9, AV1; MP4, WebM, MOV, animated GIF, or audio WAV/M4A/OGG.
-- **Portable & Offline**: Single-file portable Windows executable (`VideoStudio-Portable.exe`). No installation required. Runs anywhere.
+- **Portable & Offline**: Single-file portable Windows executable (`Sibcut-Video-Editor-Portable.exe`). No installation required. Runs anywhere.
 - **Built-in Auto Updater**: Automatic check for updates against the GitHub repository with clean user-friendly update prompt.
 
 ## Technology Stack
@@ -34,11 +34,17 @@ The editor provides an assets panel, video player and inspector panel on top, wi
 | Storage | Origin Private File System (OPFS) and local memory |
 | Desktop App | Portable Electron packaging with loopback server |
 
+## Creator & Credits
+
+- **Created by**: **Sina Sinaei** ([sina9100t@gmail.com](mailto:sina9100t@gmail.com))
+- **Based on**: The open-source **Everything** project created by **HeyPuter** ([https://github.com/HeyPuter/everything](https://github.com/HeyPuter/everything)).
+- **License**: GNU Affero General Public License v3.0 (AGPL-3.0) with original components under the MIT License. See [OPEN-SOURCE-NOTICES.md](./OPEN-SOURCE-NOTICES.md) for full licensing information and third-party acknowledgements.
+
 ## Building from Source
 
 ```sh
 npm install
 npm run dev               # Run local Vite dev server
 npm run build:electron    # Bundle application for desktop
-npx electron-builder --win portable  # Package single-file portable .exe
+npm run electron:pack     # Package single-file portable .exe
 ```

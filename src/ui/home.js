@@ -19,6 +19,7 @@ import { createProjectFromTemplate } from '../storage/template-project.js';
 import { showMenu, menuButton } from './menu.js';
 import { confirmDialog, promptDialog, toast, installTooltips, openDialog } from './dialog.js';
 import { accountButton } from './topbar.js';
+import { openAboutDialog } from './about-dialog.js';
 import { prefs, setPref } from './prefs.js';
 import { templateCard, templatesView, openTemplateDialog } from './home-templates.js';
 import { TemplatePreview } from './template-preview.js';
@@ -158,7 +159,11 @@ export class Home {
     const accountRow = h('div.side-account', accountButton(this.account || {}));
     const storage = h('div.side-storage', h('p.storage-where', ...where), this.usageEl);
     this.side = h('aside.home-side',
-      h('div.side-brand', appIcon(26), h('span.brand-name', 'Video Studio')),
+      (() => {
+        const brand = h('div.side-brand', { style: 'cursor: pointer;', title: 'About Sibcut Video Editor' }, appIcon(26), h('span.brand-name', 'Sibcut Video Editor'));
+        brand.addEventListener('click', () => openAboutDialog());
+        return brand;
+      })(),
       this.nav,
       h('div.side-spacer'),
       storage,
@@ -202,8 +207,8 @@ export class Home {
 
   renderView() {
     this.renderNav();
-    const titles = { home: 'Video Studio', templates: 'Templates', trash: 'Trash' };
-    document.title = this.view === 'home' ? 'Video Studio' : `${titles[this.view]} - Video Studio`;
+    const titles = { home: 'Sibcut Video Editor', templates: 'Templates', trash: 'Trash' };
+    document.title = this.view === 'home' ? 'Sibcut Video Editor' : `${titles[this.view]} - Sibcut Video Editor`;
     this.grid = null;
     if (this.view === 'templates') {
       this.content.replaceChildren(templatesView({ onChoose: (t) => this.chooseTemplate(t) }));
@@ -230,7 +235,7 @@ export class Home {
     importCard.addEventListener('click', () => this.importInput.click());
     const fileCard = h('button.quick-card.wide', { type: 'button' },
       h('span.quick-icon', lucide(PackageOpen, 20)),
-      h('span.quick-text', h('strong', 'Open project file'), h('span', 'Restore a project exported from Video Studio')));
+      h('span.quick-text', h('strong', 'Open project file'), h('span', 'Restore a project exported from Sibcut Video Editor')));
     fileCard.addEventListener('click', async () => {
       if (typeof window !== 'undefined' && window.projectStorageAPI?.showOpenProjectDialog) {
         const res = await window.projectStorageAPI.showOpenProjectDialog();
@@ -334,7 +339,7 @@ export class Home {
     this.grid = h('div.project-grid', { role: 'list', 'aria-label': 'Projects' });
     this.count = h('span.home-count');
     const section = h('div.home-view',
-      h('h1.sr-only', 'Video Studio'),
+      h('h1.sr-only', 'Sibcut Video Editor'),
       h('section.home-start', { 'aria-label': 'Start a project' },
         banner,
         h('div.quick-row', { role: 'group', 'aria-label': 'Quick start' }, importCard, fileCard, tplCard, scriptCard),

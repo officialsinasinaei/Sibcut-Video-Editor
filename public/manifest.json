@@ -1,6 +1,6 @@
 {
-  "name": "Video Studio",
-  "short_name": "Video Studio",
+  "name": "Sibcut Video Editor",
+  "short_name": "Sibcut Video Editor",
   "description": "A multi-track video editor in your browser.",
   "start_url": "./",
   "scope": "./",

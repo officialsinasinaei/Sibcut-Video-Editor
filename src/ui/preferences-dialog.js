@@ -6,6 +6,7 @@ import { h, announce } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { US } from '../lib/time.js';
 import { openDialog, confirmDialog } from './dialog.js';
+import { openAboutDialog } from './about-dialog.js';
 import { formatBytes } from '../model/bins.js';
 import { prefs, setPref, getTheme, setTheme } from './prefs.js';
 
@@ -124,8 +125,10 @@ export function openPreferences(ctx) {
     ),
   );
   const shortcuts = h('button.btn', { type: 'button' }, icon('keyboard', 16), 'Keyboard shortcuts...');
+  const about = h('button.btn', { type: 'button' }, icon('info', 16), 'About Sibcut Video Editor...');
   const done = h('button.btn.primary', { type: 'button' }, 'Done');
-  const d = openDialog({ title: 'Preferences', body, actions: [shortcuts, h('span.spacer'), done], className: 'prefs-dialog' });
+  const d = openDialog({ title: 'Preferences', body, actions: [shortcuts, about, h('span.spacer'), done], className: 'prefs-dialog' });
+  about.addEventListener('click', () => { d.close(); openAboutDialog(); });
   shortcuts.addEventListener('click', () => {
     d.close();
     ctx.openShortcuts?.();

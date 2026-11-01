@@ -27,6 +27,7 @@ import { createMobileChrome } from './mobile.js';
 import { openExportDialog } from './export-dialog.js';
 import { openVoiceoverDialog } from './voiceover-dialog.js';
 import { openProjectSettings } from './project-settings.js';
+import { openAboutDialog } from './about-dialog.js';
 import { openDialog, toast, installTooltips, setTooltipShortcuts } from './dialog.js';
 import { confirmLeave, finishUploads } from './leave.js';
 import { openShortcutsDialog } from './shortcuts-dialog.js';
@@ -160,7 +161,7 @@ export class Editor {
     // The workspace and, beside it, the AI sidebar (added once the mobile chrome knows the layout).
     const body = h('div.editor-body',
       h('main#main.workspace', { tabindex: '-1' },
-        h('h1.sr-only', `${project.name} - Video Studio editor`),
+        h('h1.sr-only', `${project.name} - Sibcut Video Editor editor`),
         h('div.upper',
           ctx.assets.el,
           this._resizer('v', 'left'),
@@ -226,8 +227,8 @@ export class Editor {
     window.addEventListener('beforeunload', this._onUnload);
     ctx.playerView.mounted?.();
     ctx.timeline.mounted?.();
-    document.title = `${project.name} - Video Studio`;
-    store.on('change', () => (document.title = `${store.project.name} - Video Studio`));
+    document.title = `${project.name} - Sibcut Video Editor`;
+    store.on('change', () => (document.title = `${store.project.name} - Sibcut Video Editor`));
     this._coverTimer = null;
     this._coverIdle = null;
     store.on('change', () => this._scheduleCover());
@@ -387,15 +388,7 @@ export class Editor {
   }
 
   openAbout() {
-    openDialog({
-      title: 'About Video Studio',
-      className: 'small',
-      body: h('div.about',
-        h('div.about-logo', appIcon(64)),
-        h('p', 'A multi-track video editor that runs entirely on your device. Decoding and encoding use your hardware through WebCodecs, the preview is drawn with WebGL2, and audio math runs in WebAssembly.'),
-        h('p', 'Projects and media are saved locally on your device.'),
-      ),
-    });
+    openAboutDialog();
   }
 
   /**

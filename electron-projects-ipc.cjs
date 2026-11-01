@@ -178,8 +178,8 @@ function setupProjectsIPC(ipcMain, app, getMainWindow) {
       title: 'Save Project As',
       defaultPath,
       filters: [
-        { name: 'Video Studio Project (*.vsproj)', extensions: ['vsproj'] },
-        { name: 'Video Studio Bundle (*.video-studio.zip, *.zip)', extensions: ['zip'] },
+        { name: 'Sibcut Video Editor Project (*.vsproj)', extensions: ['vsproj'] },
+        { name: 'Sibcut Video Editor Bundle (*.video-studio.zip, *.zip)', extensions: ['zip'] },
         { name: 'All Files (*.*)', extensions: ['*'] },
       ],
     });
@@ -191,7 +191,7 @@ function setupProjectsIPC(ipcMain, app, getMainWindow) {
       title: 'Open Project File',
       defaultPath: getActiveProjectsDir(),
       filters: [
-        { name: 'Video Studio Projects & Bundles (*.vsproj, *.zip)', extensions: ['vsproj', 'zip'] },
+        { name: 'Sibcut Video Editor Projects & Bundles (*.vsproj, *.zip)', extensions: ['vsproj', 'zip'] },
         { name: 'All Files (*.*)', extensions: ['*'] },
       ],
       properties: ['openFile'],

@@ -335,7 +335,7 @@ async function createWindow() {
     minWidth:  860,
     minHeight: 560,
     icon:      iconPath,
-    title:     'Video Studio',
+    title:     'Sibcut Video Editor',
     backgroundColor: '#121214',   // matches the app's dark background – no white flash
     autoHideMenuBar: false,
     show: false,                   // show only when ready to avoid a blank flicker
@@ -360,7 +360,7 @@ async function createWindow() {
 
   // Open external links in the default browser, not inside Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http')) shell.openExternal(url);
+    if (url.startsWith('http') || url.startsWith('mailto:')) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -479,14 +479,20 @@ function buildMenu() {
         },
         { type: 'separator' },
         {
-          label: 'About Video Studio',
-          click: () => dialog.showMessageBox(mainWindow, {
-            type: 'info',
-            title: 'About Video Studio',
-            message: 'Video Studio',
-            detail: `Version: v${app.getVersion()}\nA multi-track video editor.\nProjects are stored locally on this device.\n\nBuilt with Electron + Vite.`,
-            buttons: ['OK'],
-          }),
+          label: 'About Sibcut Video Editor',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:action', 'about');
+            } else {
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'About Sibcut Video Editor',
+                message: 'Sibcut Video Editor',
+                detail: `Version: v${app.getVersion()}\nA professional video editing application.\n\nCreated by Sina Sinaei\nContact: sina9100t@gmail.com\n\nBased on the Everything project by HeyPuter.\nhttps://github.com/HeyPuter/everything\n\n© 2026 Sina Sinaei`,
+                buttons: ['OK'],
+              });
+            }
+          },
         },
       ],
     },

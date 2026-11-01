@@ -224,7 +224,7 @@ async function checkForUpdates(parentWindow, isManual = false) {
         dialog.showMessageBox(parentWindow, {
           type: 'info',
           title: 'Up to Date',
-          message: 'Video Studio is up to date!',
+          message: 'Sibcut Video Editor is up to date!',
           detail: `You are running the latest version (v${currentVersion}).`,
           buttons: ['OK'],
         });

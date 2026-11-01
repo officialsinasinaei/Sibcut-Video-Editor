@@ -7,6 +7,7 @@ import { icon, appIcon } from '../lib/icons.js';
 import { menuButton } from './menu.js';
 import { getTheme, setTheme, prefs } from './prefs.js';
 import { promptDialog, toast } from './dialog.js';
+import { openAboutDialog } from './about-dialog.js';
 
 export function themeMenuItems() {
   const t = getTheme();
@@ -35,6 +36,8 @@ export function accountButton({ user, picture, extraItems = [] }) {
     { heading: 'Preferences' },
     ...extraItems,
     { label: 'Theme', icon: 'sun', submenu: themeMenuItems },
+    'separator',
+    { label: 'About Sibcut Video Editor', icon: 'info', onSelect: () => openAboutDialog() },
   ].filter(Boolean), { align: 'end', label: 'Settings' });
   return btn;
 }
@@ -94,7 +97,7 @@ export function createTopbar(ctx) {
     { label: 'Theme', icon: 'sun', submenu: themeMenuItems },
     cmd('shortcuts', { icon: 'keyboard', label: 'Keyboard shortcuts' }),
     'separator',
-    { label: 'About Video Studio', icon: 'info', onSelect: () => ctx.openAbout() },
+    { label: 'About Sibcut Video Editor', icon: 'info', onSelect: () => ctx.openAbout() },
   ], { label: 'Main menu' });
 
   // Desktop menu bar; on narrow windows the app menu above holds everything.
@@ -191,7 +194,7 @@ export function createTopbar(ctx) {
     Help: () => [
       cmd('shortcuts', { icon: 'keyboard', label: 'Keyboard shortcuts' }),
       'separator',
-      { label: 'About Video Studio', icon: 'info', onSelect: () => ctx.openAbout() },
+      { label: 'About Sibcut Video Editor', icon: 'info', onSelect: () => ctx.openAbout() },
     ],
   };
   const menubar = h('nav.menubar', { 'aria-label': 'Menu bar' }, Object.entries(menus).map(([name, items]) => {

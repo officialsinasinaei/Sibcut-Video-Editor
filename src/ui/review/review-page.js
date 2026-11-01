@@ -43,7 +43,7 @@ export class ReviewPage {
     this.pin = { t: 0, end: null, held: false };
     this._disposers = [];
     this._linkTries = 0;
-    document.title = 'Review - Video Studio';
+    document.title = 'Review - Sibcut Video Editor';
     this.start();
   }
 
@@ -116,7 +116,7 @@ export class ReviewPage {
     const s = this.session;
     const r = s.review;
     this.root.removeAttribute('aria-busy');
-    document.title = `${r.title} - Review - Video Studio`;
+    document.title = `${r.title} - Review - Sibcut Video Editor`;
 
     /* Header */
     this.versionSelect = h('select.select.rv-version', { 'aria-label': 'Version' });

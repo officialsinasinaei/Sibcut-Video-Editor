@@ -1,0 +1,9 @@
+export const APP_NAME = 'Sibcut Video Editor';
+export const APP_VERSION = '1.0.0';
+export const APP_DESCRIPTION = 'A professional video editing application.';
+export const CREATOR_NAME = 'Sina Sinaei';
+export const CREATOR_EMAIL = 'sina9100t@gmail.com';
+export const ORIGINAL_PROJECT_NAME = 'Everything';
+export const ORIGINAL_PROJECT_AUTHOR = 'HeyPuter';
+export const ORIGINAL_PROJECT_URL = 'https://github.com/HeyPuter/everything';
+export const COPYRIGHT_NOTICE = '© 2026 Sina Sinaei';

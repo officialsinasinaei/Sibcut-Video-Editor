@@ -1,10 +1,11 @@
 {
   "name": "video-studio",
   "version": "1.0.0",
-  "description": "Video Studio: a multi-track video editor. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored locally on your device.",
+  "description": "Sibcut Video Editor: a professional multi-track video editor. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored locally on your device.",
   "type": "module",
   "private": true,
-  "author": "Video Studio",
+  "author": "Sina Sinaei",
+  "homepage": "https://github.com/officialsinasinaei/Cupcut-Video-Editor",
   "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=22.12"
@@ -65,8 +66,8 @@
   },
   "build": {
     "appId": "com.videostudio.app",
-    "productName": "Video Studio",
-    "copyright": "Copyright © 2026 Video Studio",
+    "productName": "Sibcut Video Editor",
+    "copyright": "Copyright © 2026 Sina Sinaei",
     "asar": true,
     "asarUnpack": [
       "**/native/**",
@@ -99,7 +100,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "VideoStudio-Portable.exe"
+      "artifactName": "Sibcut-Video-Editor-Portable.exe"
     },
     "mac": {
       "icon": "build/icon.icns",
