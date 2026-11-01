@@ -123,15 +123,15 @@ describe('Extensions Tab (Replaces Avatars)', () => {
 
     const loadBtn = tab.el.querySelector('.ext-toolbar-load-btn');
     expect(loadBtn).toBeDefined();
-    expect(loadBtn.textContent).toContain('Load Extension');
+    expect(loadBtn.textContent).toContain('Load');
 
     const guideBtn = tab.el.querySelector('.ext-toolbar-guide-btn');
     expect(guideBtn).toBeDefined();
-    expect(guideBtn.textContent).toContain('Developer Guide');
+    expect(guideBtn.getAttribute('aria-label') || guideBtn.getAttribute('title')).toContain('Developer Guide');
 
     const copyBtn = tab.el.querySelector('.ext-toolbar-copy-btn');
     expect(copyBtn).toBeDefined();
-    expect(copyBtn.textContent).toContain('Copy Guide');
+    expect(copyBtn.getAttribute('aria-label') || copyBtn.getAttribute('title')).toContain('Copy Guide');
 
     tab.dispose();
   });
@@ -188,16 +188,14 @@ describe('Developer Guide & Tutorial Component', () => {
     expect(doCards.length).toBeGreaterThanOrEqual(8);
     expect(dontCards.length).toBeGreaterThanOrEqual(8);
 
-    // Check Copy Guide for AI buttons (in hero actions and in AI banner)
+    // Check Copy Guide for AI button and interactive AI prompt strip
     const copyAiHeroBtn = guideEl.querySelector('.ext-guide-copy-ai-btn');
     expect(copyAiHeroBtn).toBeDefined();
-    expect(copyAiHeroBtn.textContent).toContain('Copy Guide for AI');
+    expect(copyAiHeroBtn.textContent).toContain('Copy');
 
-    const aiBanner = guideEl.querySelector('.ext-guide-ai-banner');
-    expect(aiBanner).toBeDefined();
-    const copyAiBannerBtn = aiBanner.querySelector('.ext-guide-ai-banner-btn');
-    expect(copyAiBannerBtn).toBeDefined();
-    expect(copyAiBannerBtn.textContent).toContain('Copy Guide for AI');
+    const aiStrip = guideEl.querySelector('.ext-guide-ai-strip');
+    expect(aiStrip).toBeDefined();
+    expect(aiStrip.textContent).toContain('Copy for AI');
   });
 
   it('generates complete AI prompt context in Markdown format for chatbots', () => {

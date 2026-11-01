@@ -98,40 +98,38 @@ export function extensionsTab(ctx) {
     return card;
   }
 
-  // Toolbar actions (Load Extension and Developer Guide)
+  // Compact toolbar actions: Load Extension button + Icon-only Guide and Copy buttons + overflow menu
   const loadBtn = h('button.btn.small.primary.ext-toolbar-load-btn', {
     type: 'button',
     'aria-label': 'Load extension from folder or URL',
-    title: 'Load custom extension',
+    title: 'Load custom extension (folder or dev URL)',
   },
     icon('folderUp', 14),
-    h('span', 'Load Extension')
+    h('span.ext-btn-label', 'Load')
   );
   loadBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openLoader();
   });
 
-  const guideBtn = h('button.btn.small.ext-toolbar-guide-btn', {
+  const guideBtn = h('button.icon-btn.small.ext-toolbar-guide-btn', {
     type: 'button',
-    'aria-label': 'View extension developer guide and tutorial',
+    'aria-label': 'Developer Guide & Tutorial',
     title: 'Developer Guide & Tutorial',
   },
-    icon('bookOpen', 14),
-    h('span', 'Developer Guide')
+    icon('bookOpen', 14)
   );
   guideBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     layout.select('guide');
   });
 
-  const copyGuideBtn = h('button.btn.small.ext-toolbar-copy-btn', {
+  const copyGuideBtn = h('button.icon-btn.small.ext-toolbar-copy-btn', {
     type: 'button',
-    'aria-label': 'Copy full extension developer guide for AI chatbot prompt context',
-    title: 'Copy Guide for AI Context (ChatGPT, Claude, etc.)',
+    'aria-label': 'Copy Guide for AI Context',
+    title: 'Copy Developer Guide for AI Context (ChatGPT, Claude, etc.)',
   },
-    icon('copy', 14),
-    h('span', 'Copy Guide')
+    icon('copy', 14)
   );
   copyGuideBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -147,6 +145,13 @@ export function extensionsTab(ctx) {
     toolbar,
     search: true,
     searchLabel: 'Search extensions...',
+    menu: () => [
+      { label: 'Load Extension...', icon: 'folderUp', onSelect: openLoader },
+      { label: 'Developer Guide & Tutorial', icon: 'bookOpen', onSelect: () => layout.select('guide') },
+      { label: 'Copy Guide for AI Prompt Context', icon: 'copy', onSelect: () => copyDeveloperGuide() },
+    ],
+    menuLabel: 'Extension actions',
+    menuIcon: 'ellipsis',
     render(cat, q) {
       // 1. If Developer Guide category is selected, render the full developer documentation
       if (cat === 'guide') {

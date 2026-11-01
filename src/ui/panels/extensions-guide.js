@@ -312,77 +312,98 @@ export function renderDeveloperGuide({ onBack, onOpenLoader }) {
     );
   }
 
-  // Header banner
+  // Header banner: Compact, well-aligned, space-efficient toolbar
   const copyAiBtnHeader = h('button.btn.small.primary.ext-guide-copy-ai-btn', {
     type: 'button',
     'aria-label': 'Copy full guide for AI context',
     title: 'Copy complete specification and prompt for ChatGPT, Claude, etc.',
-  }, icon('copy', 14), h('span', 'Copy Guide for AI'));
+  }, icon('copy', 13), h('span.ext-btn-text', 'Copy for AI'));
 
   copyAiBtnHeader.addEventListener('click', (e) => {
     e.stopPropagation();
     copyDeveloperGuide(copyAiBtnHeader);
   });
 
-  const aiBannerCopyBtn = h('button.btn.small.primary.ext-guide-ai-banner-btn', {
+  const expandBtn = h('button.icon-btn.small.ext-guide-expand-btn', {
     type: 'button',
-    'aria-label': 'Copy full guide for AI chatbot prompt',
-  }, icon('copy', 14), h('span', 'Copy Guide for AI Context'));
+    'aria-label': 'Open guide in full view dialog',
+    title: 'Full View Dialog',
+  }, icon('fullscreen', 14));
 
-  aiBannerCopyBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    copyDeveloperGuide(aiBannerCopyBtn);
+  expandBtn.addEventListener('click', () => {
+    const dlg = openDialog({
+      title: 'Extension Developer Guide & Tutorial',
+      body: renderDeveloperGuide({ onBack: () => dlg.close(), onOpenLoader }),
+      wide: true,
+      className: 'ext-guide-full-dialog',
+    });
   });
 
-  const aiBanner = h('div.ext-guide-ai-banner',
-    h('div.ext-guide-ai-banner-left',
-      h('div.ext-guide-ai-icon-circle', icon('sparkles', 20)),
-      h('div.ext-guide-ai-info',
-        h('h3.ext-guide-ai-title', 'Building an extension with AI? (ChatGPT, Claude, Gemini, Cursor)'),
-        h('p.ext-guide-ai-desc',
-          'Click the button to copy the complete developer specification, SDK reference, and Do\'s & Don\'ts formatted as an instant prompt. Paste it directly into your AI chat and ask it to write your custom extension!'
-        )
-      )
-    ),
-    aiBannerCopyBtn
+  const backBtn = h('button.icon-btn.small.ext-guide-back-btn', {
+    type: 'button',
+    'aria-label': 'Back to extensions catalog',
+    title: 'Back to catalog',
+  }, icon('arrowLeft', 14));
+  backBtn.addEventListener('click', onBack);
+
+  const loadExtBtn = h('button.icon-btn.small.ext-guide-load-btn', {
+    type: 'button',
+    'aria-label': 'Load custom extension',
+    title: 'Load Custom Extension',
+  }, icon('folderUp', 14));
+  loadExtBtn.addEventListener('click', onOpenLoader);
+
+  // Compact AI Prompt Callout Strip (Single interactive tip, saves massive vertical space)
+  const aiStrip = h('div.ext-guide-ai-strip', {
+    role: 'button',
+    tabindex: '0',
+    title: 'Click to copy full developer guide formatted for ChatGPT or Claude',
+    'aria-label': 'Click to copy developer guide for AI',
+  },
+    icon('sparkles', 13, 'ext-ai-sparkle'),
+    h('span.ext-ai-strip-text',
+      h('strong', 'Building with AI? '),
+      'Click ',
+      h('em', 'Copy for AI'),
+      ' above to paste complete context into ChatGPT, Claude, or Gemini.'
+    )
   );
 
+  aiStrip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    copyDeveloperGuide(copyAiBtnHeader);
+  });
+
+  aiStrip.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      copyDeveloperGuide(copyAiBtnHeader);
+    }
+  });
+
+  // Top header assembly: Clean responsive hierarchy that never collides
   const header = h('header.ext-guide-hero',
-    h('div.ext-guide-hero-top',
-      h('div.ext-guide-hero-badge',
-        icon('bookOpen', 14),
-        h('span', 'Developer Documentation & SDK')
+    h('div.ext-guide-hero-header',
+      h('div.ext-guide-title-row',
+        backBtn,
+        h('h2.ext-guide-hero-title', 'Developer Guide'),
+        h('span.ext-guide-badge', 'SDK v1')
       ),
-      h('div.ext-guide-hero-actions',
+      h('div.ext-guide-action-toolbar',
         copyAiBtnHeader,
-        h('button.btn.small.ext-guide-expand-btn', {
-          type: 'button',
-          'aria-label': 'Open guide in full view dialog',
-        }, icon('fullscreen', 14), h('span', 'Full View')),
-        h('button.btn.small.ext-guide-back-btn', {
-          type: 'button',
-          'aria-label': 'Back to extensions catalog',
-        }, icon('back', 14), h('span', 'Back')),
-        h('button.btn.small.ext-guide-load-btn', {
-          type: 'button',
-          'aria-label': 'Load custom extension',
-        }, icon('folderUp', 14), h('span', 'Load Extension'))
+        expandBtn,
+        loadExtBtn
       )
     ),
-    h('h1.ext-guide-hero-title', 'Extension Developer Guide & Tutorial'),
-    h('p.ext-guide-hero-desc',
-      'Build independent, full-screen HTML/CSS/JavaScript web extensions for Video Studio. ' +
-      'Integrate real-time canvas animations, custom graphics, and export high-quality video clips directly into the editor timeline.'
-    ),
-    aiBanner,
-    // Table of Contents
+    aiStrip,
+    // Table of Contents: Compact responsive pill bar
     h('nav.ext-guide-toc', { 'aria-label': 'Guide table of contents' },
-      h('a.ext-toc-pill', { href: '#guide-architecture' }, icon('blocks', 12), '1. Architecture'),
-      h('a.ext-toc-pill', { href: '#guide-structure' }, icon('folder', 12), '2. Folder Structure'),
-      h('a.ext-toc-pill', { href: '#guide-sdk' }, icon('code', 12), '3. Extension SDK'),
-      h('a.ext-toc-pill', { href: '#guide-timeline' }, icon('timelinePlus', 12), '4. "Add to Timeline" Tutorial'),
-      h('a.ext-toc-pill', { href: '#guide-dos-donts' }, icon('check', 12), '5. Do\'s and Don\'ts'),
-      h('a.ext-toc-pill', { href: '#guide-testing' }, icon('wand', 12), '6. Loading & Live Testing')
+      h('a.ext-toc-pill', { href: '#guide-architecture' }, icon('blocks', 11), '1. Architecture'),
+      h('a.ext-toc-pill', { href: '#guide-structure' }, icon('folder', 11), '2. Structure'),
+      h('a.ext-toc-pill', { href: '#guide-sdk' }, icon('code', 11), '3. SDK'),
+      h('a.ext-toc-pill', { href: '#guide-timeline' }, icon('timelinePlus', 11), '4. Timeline Tutorial'),
+      h('a.ext-toc-pill', { href: '#guide-dos-donts' }, icon('check', 11), '5. Do\'s & Don\'ts'),
+      h('a.ext-toc-pill', { href: '#guide-testing' }, icon('wand', 11), '6. Testing')
     )
   );
 
