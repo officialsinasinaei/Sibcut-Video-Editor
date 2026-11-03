@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-11-03
+
+### Fixed
+- **Vosk Speech Recognition Worker Offloading**: Offloaded CPU-heavy Kaldi C/C++ speech recognition decoding from the Electron main process thread into a dedicated background `worker_threads` Worker (`vosk-worker.cjs`). Eliminates Windows "(Not Responding)" ghost windows, application freezing, and whiteout crashes when transcribing with large language models (such as `vosk-model-en-us-0.22-lgraph`).
+- **Captions UI Auto-Scroll & Viewport Visibility**: Fixed an issue where the caption generation progress indicator expanded below the fold at the bottom of the captions panel without scrolling into view. The panel now smoothly auto-scrolls into view (`scrollIntoView`) on start and across each step change.
+- **Live Progress & Cancellation Support**: Enhanced caption generation progress bar with live step percentages `(1%..99%)`, overall completion percentage readout, and an active interactive Cancel button wired to abort background worker transcription instantly.
+- **Model Path & Junction Discovery**: Enhanced offline model scanning to properly detect Windows directory junctions and symlinks across multiple drive locations.
+
 ## [1.0.0] - 2026-11-01
 
 ### Overview
