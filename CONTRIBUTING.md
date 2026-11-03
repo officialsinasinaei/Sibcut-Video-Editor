@@ -115,6 +115,12 @@ npm run electron:pack:linux
 
 ---
 
+## Release & Deployment Guide
+
+For the complete runbook on tagging, pushing, large-binary network configuration, and GitHub Actions release builds, see [**RELEASE-AND-GIT-WORKFLOW.md**](./RELEASE-AND-GIT-WORKFLOW.md).
+
+---
+
 ## Pull Request Guidelines
 
 1. **Create a Topic Branch**:

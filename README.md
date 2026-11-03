@@ -240,4 +240,5 @@ Full third-party license notices, copyright texts, and font acknowledgements are
 - **Repository**: [https://github.com/officialsinasinaei/Sibcut-Video-Editor](https://github.com/officialsinasinaei/Sibcut-Video-Editor)
 - **Issue Tracker**: [https://github.com/officialsinasinaei/Sibcut-Video-Editor/issues](https://github.com/officialsinasinaei/Sibcut-Video-Editor/issues)
 - **Contributing**: Please review [`CONTRIBUTING.md`](./CONTRIBUTING.md) before submitting pull requests.
+- **Release Runbook & Git Workflow**: Maintainers and agents should follow [`RELEASE-AND-GIT-WORKFLOW.md`](./RELEASE-AND-GIT-WORKFLOW.md).
 - **Security Vulnerabilities**: Please review [`SECURITY.md`](./SECURITY.md) to report security concerns responsibly.
