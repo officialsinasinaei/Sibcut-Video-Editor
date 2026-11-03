@@ -83,6 +83,10 @@ function setupVoskIPC(ipcMain, voskService) {
       throw err;
     }
   });
+
+  ipcMain.handle('vosk:cancel-transcribe', async () => {
+    return voskService.cancelTranscription();
+  });
 }
 
 /**
@@ -205,6 +209,13 @@ async function handleVoskHttp(req, res, voskService) {
         res.end(JSON.stringify({ error: err.message }));
       }
     });
+    return true;
+  }
+
+  if (pathname === '/api/vosk/cancel-transcribe' && req.method === 'POST') {
+    const ok = voskService.cancelTranscription();
+    res.writeHead(200, corsHeaders);
+    res.end(JSON.stringify({ ok }));
     return true;
   }
 

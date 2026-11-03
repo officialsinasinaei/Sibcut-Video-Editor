@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('voskAPI', {
   transcribe: (modelPath, audioData, sampleRate = 16000) =>
     ipcRenderer.invoke('vosk:transcribe', { modelPath, audioData, sampleRate }),
 
+  cancelTranscribe: () =>
+    ipcRenderer.invoke('vosk:cancel-transcribe'),
+
   onDownloadProgress: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('vosk:download-progress', handler);

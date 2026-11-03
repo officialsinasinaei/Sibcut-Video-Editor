@@ -327,6 +327,7 @@
 /* Captions -------------------------------------------------------------------- */
 .cap-form {
   padding-top: 4px;
+  padding-bottom: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -389,6 +390,25 @@
   color: var(--text-2);
 }
 
+.cap-step-text {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cap-step-name {
+  flex: 1;
+}
+
+.cap-step-pct {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-weight: 500;
+  margin-left: 6px;
+}
+
 .cap-step-icon {
   width: 16px;
   height: 16px;
@@ -408,8 +428,19 @@
   border: none;
 }
 
+.cap-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cap-bar-row .cap-bar {
+  flex: 1;
+}
+
 .cap-bar {
-  height: 4px;
+  height: 6px;
   border-radius: 4px;
   background: var(--border);
   overflow: hidden;
@@ -420,6 +451,15 @@
   width: 0;
   background: var(--accent);
   transition: width var(--t) linear;
+}
+
+.cap-percent {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
 }
 
 .cap-progress-foot {

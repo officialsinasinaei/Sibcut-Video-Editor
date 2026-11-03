@@ -93,6 +93,7 @@
       "updater-ui.html",
       "preload.cjs",
       "vosk-service.cjs",
+      "vosk-worker.cjs",
       "electron-vosk-ipc.cjs",
       "electron-projects-ipc.cjs",
       "native/**",

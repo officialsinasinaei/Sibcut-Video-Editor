@@ -26,6 +26,14 @@ try {
   console.warn('[Vosk] Koffi not loaded yet:', e.message);
 }
 
+let Worker = null;
+let isMainThread = true;
+try {
+  const wt = require('worker_threads');
+  Worker = wt.Worker;
+  isMainThread = wt.isMainThread;
+} catch {}
+
 // ─── Native Library Binding ──────────────────────────────────────────────────
 let libvosk = null;
 let VoskModel = null;
@@ -380,83 +388,101 @@ async function refreshCatalog() {
  * Scan for all installed models on disk
  */
 function listInstalledModels() {
-  if (!modelsDir || !fs.existsSync(modelsDir)) return [];
+  if (!modelsDir) return [];
   const catalog = getCatalog();
   const catalogMap = new Map(catalog.map((m) => [m.name, m]));
 
   const installed = [];
-  const entries = fs.readdirSync(modelsDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'temp') continue;
-    const dir = path.join(modelsDir, entry.name);
-
-    let modelDir = dir;
-    // Check if the model files are inside a nested subfolder
-    if (!isValidModelDir(dir)) {
-      const subEntries = fs.readdirSync(dir, { withFileTypes: true });
-      const validSub = subEntries.find((s) => s.isDirectory() && isValidModelDir(path.join(dir, s.name)));
-      if (validSub) modelDir = path.join(dir, validSub.name);
-      else continue;
+  const candidateModelDirs = [modelsDir];
+  const knownDirs = [
+    'D:\\apps\\Sibcut Video Editor\\data\\vosk-models',
+    path.join(process.env.APPDATA || '', 'video-studio', 'vosk-models'),
+    path.join(process.env.APPDATA || '', 'Video Studio', 'vosk-models'),
+    path.resolve('models'),
+  ];
+  for (const kd of knownDirs) {
+    if (kd && fs.existsSync(kd) && !candidateModelDirs.includes(kd)) {
+      candidateModelDirs.push(kd);
     }
-
-    const cat = catalogMap.get(entry.name);
-    const sizeBytes = getDirSize(modelDir);
-
-    // Extract language from catalog or parse from name
-    let lang = cat?.lang || 'unknown';
-    let langText = cat?.lang_text || '';
-    if (lang === 'fa' || langText.toLowerCase() === 'farsi') {
-      lang = 'fa';
-      langText = 'Persian (Farsi)';
-    } else if (lang === 'en-us') {
-      langText = 'English (US)';
-    } else if (!langText) {
-      if (entry.name.includes('-fa-') || entry.name.endsWith('-fa')) { lang = 'fa'; langText = 'Persian (Farsi)'; }
-      else if (entry.name.includes('-en-') || entry.name.endsWith('-en') || entry.name.includes('en-us')) { lang = 'en'; langText = 'English'; }
-      else if (entry.name.includes('-ar-') || entry.name.endsWith('-ar')) { lang = 'ar'; langText = 'Arabic'; }
-      else if (entry.name.includes('-es-') || entry.name.endsWith('-es')) { lang = 'es'; langText = 'Spanish'; }
-      else if (entry.name.includes('-fr-') || entry.name.endsWith('-fr')) { lang = 'fr'; langText = 'French'; }
-      else if (entry.name.includes('-de-') || entry.name.endsWith('-de')) { lang = 'de'; langText = 'German'; }
-      else if (entry.name.includes('-ru-') || entry.name.endsWith('-ru')) { lang = 'ru'; langText = 'Russian'; }
-      else { langText = lang.toUpperCase(); }
-    }
-
-    installed.push({
-      id: entry.name,
-      name: entry.name,
-      path: modelDir,
-      lang,
-      langText,
-      type: entry.name.includes('small') ? 'small' : 'big',
-      size: sizeBytes,
-      sizeText: formatBytes(sizeBytes),
-      version: cat?.version || '',
-    });
   }
 
-  // Also check workspace root for pre-extracted test models or models folder
-  const rootModelsDir = path.resolve('models');
-  if (fs.existsSync(rootModelsDir)) {
+  for (const scanDir of candidateModelDirs) {
+    if (!fs.existsSync(scanDir)) continue;
+    let entries = [];
     try {
-      for (const entry of fs.readdirSync(rootModelsDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const p = path.join(rootModelsDir, entry.name);
-        if (isValidModelDir(p) && !installed.some((m) => m.id === entry.name)) {
-          installed.push({
-            id: entry.name,
-            name: entry.name,
-            path: p,
-            lang: entry.name.includes('-fa-') ? 'fa' : 'en',
-            langText: entry.name.includes('-fa-') ? 'Persian (Farsi)' : 'English',
-            type: entry.name.includes('small') ? 'small' : 'big',
-            size: getDirSize(p),
-            sizeText: formatBytes(getDirSize(p)),
-            version: '',
+      entries = fs.readdirSync(scanDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.name === 'temp' || entry.name.startsWith('.')) continue;
+      const dir = path.join(scanDir, entry.name);
+      let isDir = false;
+      try {
+        isDir = entry.isDirectory() || (entry.isSymbolicLink() && fs.statSync(dir).isDirectory());
+      } catch {
+        continue;
+      }
+      if (!isDir) continue;
+
+      let modelDir = dir;
+      // Check if the model files are inside a nested subfolder
+      if (!isValidModelDir(dir)) {
+        try {
+          const subEntries = fs.readdirSync(dir, { withFileTypes: true });
+          const validSub = subEntries.find((s) => {
+            const subPath = path.join(dir, s.name);
+            let subIsDir = false;
+            try {
+              subIsDir = s.isDirectory() || (s.isSymbolicLink() && fs.statSync(subPath).isDirectory());
+            } catch {}
+            return subIsDir && isValidModelDir(subPath);
           });
+          if (validSub) modelDir = path.join(dir, validSub.name);
+          else continue;
+        } catch {
+          continue;
         }
       }
-    } catch {}
+
+      // Avoid duplicates
+      if (installed.some((m) => m.id === entry.name || m.path === modelDir)) continue;
+
+      const cat = catalogMap.get(entry.name);
+      const sizeBytes = getDirSize(modelDir);
+
+      // Extract language from catalog or parse from name
+      let lang = cat?.lang || 'unknown';
+      let langText = cat?.lang_text || '';
+      if (lang === 'fa' || langText.toLowerCase() === 'farsi') {
+        lang = 'fa';
+        langText = 'Persian (Farsi)';
+      } else if (lang === 'en-us') {
+        langText = 'English (US)';
+      } else if (!langText) {
+        if (entry.name.includes('-fa-') || entry.name.endsWith('-fa')) { lang = 'fa'; langText = 'Persian (Farsi)'; }
+        else if (entry.name.includes('-en-') || entry.name.endsWith('-en') || entry.name.includes('en-us')) { lang = 'en'; langText = 'English'; }
+        else if (entry.name.includes('-ar-') || entry.name.endsWith('-ar')) { lang = 'ar'; langText = 'Arabic'; }
+        else if (entry.name.includes('-es-') || entry.name.endsWith('-es')) { lang = 'es'; langText = 'Spanish'; }
+        else if (entry.name.includes('-fr-') || entry.name.endsWith('-fr')) { lang = 'fr'; langText = 'French'; }
+        else if (entry.name.includes('-de-') || entry.name.endsWith('-de')) { lang = 'de'; langText = 'German'; }
+        else if (entry.name.includes('-ru-') || entry.name.endsWith('-ru')) { lang = 'ru'; langText = 'Russian'; }
+        else { langText = lang.toUpperCase(); }
+      }
+
+      installed.push({
+        id: entry.name,
+        name: entry.name,
+        path: modelDir,
+        lang,
+        langText,
+        type: entry.name.includes('small') ? 'small' : 'big',
+        size: sizeBytes,
+        sizeText: formatBytes(sizeBytes),
+        version: cat?.version || '',
+      });
+    }
   }
 
   return installed;
@@ -706,16 +732,103 @@ function getOrLoadModel(modelPathOrId) {
   return modelPtr;
 }
 
+// ─── Worker Thread Management ────────────────────────────────────────────────
+let workerInstance = null;
+let activeTaskId = 0;
+const pendingWorkerTasks = new Map();
+
 /**
- * Transcribe 16kHz mono audio buffer using Vosk
- *
- * @param {string|object} modelPathOrOptions - Model path/ID or options object
- * @param {ArrayBuffer|Float32Array|Int16Array|Buffer} audioData - Audio samples
- * @param {number} sampleRate - Sample rate (defaults to 16000)
- * @param {Function} onProgress - Progress callback (fraction 0..1)
- * @returns {Promise<{ words: Array<{ word: string, start: number, end: number, conf: number }>, text: string }>}
+ * Spawn or return a persistent background worker thread for CPU-heavy speech recognition
  */
-async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000, onProgress = null) {
+function getOrCreateWorker() {
+  if (!Worker || !isMainThread) return null;
+  if (workerInstance) return workerInstance;
+
+  const workerScript = path.join(__dirname, 'vosk-worker.cjs');
+  if (!fs.existsSync(workerScript)) return null;
+
+  const userPath = appInstance ? appInstance.getPath('userData') : (modelsDir ? path.dirname(modelsDir) : '');
+
+  try {
+    const worker = new Worker(workerScript, {
+      workerData: {
+        userDataPath: userPath,
+        modelsDir: modelsDir,
+        dllDir: getNativeDllDir(),
+      },
+    });
+
+    worker.on('message', (msg) => {
+      if (!msg || !msg.id) return;
+      const task = pendingWorkerTasks.get(msg.id);
+      if (!task) return;
+
+      if (msg.type === 'progress') {
+        try {
+          task.onProgress?.(msg.fraction);
+        } catch {}
+      } else if (msg.type === 'done') {
+        pendingWorkerTasks.delete(msg.id);
+        task.resolve(msg.result);
+      } else if (msg.type === 'cancelled') {
+        pendingWorkerTasks.delete(msg.id);
+        task.reject(new DOMException('Transcription cancelled', 'AbortError'));
+      } else if (msg.type === 'error') {
+        pendingWorkerTasks.delete(msg.id);
+        task.reject(new Error(msg.error || 'Vosk worker transcription error'));
+      }
+    });
+
+    worker.on('error', (err) => {
+      console.error('[Vosk Service] Worker error:', err);
+      for (const [id, task] of pendingWorkerTasks) {
+        task.reject(err);
+      }
+      pendingWorkerTasks.clear();
+      workerInstance = null;
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0 && pendingWorkerTasks.size > 0) {
+        const err = new Error(`Vosk worker exited unexpectedly with code ${code}`);
+        for (const [id, task] of pendingWorkerTasks) {
+          task.reject(err);
+        }
+        pendingWorkerTasks.clear();
+      }
+      workerInstance = null;
+    });
+
+    workerInstance = worker;
+    return worker;
+  } catch (err) {
+    console.warn('[Vosk] Failed to spawn worker thread:', err.message);
+    workerInstance = null;
+    return null;
+  }
+}
+
+/**
+ * Cancel active transcription immediately and terminate background worker
+ */
+function cancelTranscription() {
+  if (workerInstance) {
+    try {
+      workerInstance.terminate();
+    } catch {}
+    workerInstance = null;
+  }
+  for (const [id, task] of pendingWorkerTasks) {
+    task.reject(new DOMException('Transcription cancelled', 'AbortError'));
+  }
+  pendingWorkerTasks.clear();
+  return true;
+}
+
+/**
+ * Synchronous/chunked in-process transcription with cooperative event-loop yielding
+ */
+async function inProcessTranscribeAudio(modelPathOrOptions, audioData, sampleRate = 16000, onProgress = null, isCancelled = null) {
   let modelPath = modelPathOrOptions;
   let rawAudio = audioData;
   let sRate = sampleRate;
@@ -762,9 +875,14 @@ async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000
   const CHUNK_SIZE = 16000; // 0.5 sec of 16kHz 16-bit audio (16000 bytes)
   const totalBytes = pcmBuffer.length;
   let offset = 0;
+  let chunkCount = 0;
 
   try {
     while (offset < totalBytes) {
+      if (isCancelled && isCancelled()) {
+        break;
+      }
+
       const end = Math.min(offset + CHUNK_SIZE, totalBytes);
       const chunk = pcmBuffer.subarray(offset, end);
 
@@ -793,37 +911,111 @@ async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000
       }
 
       offset = end;
-      if (onProgress) {
-        onProgress(Math.min(1, offset / totalBytes));
+      chunkCount++;
+      if (progressCb) {
+        progressCb(Math.min(1, offset / totalBytes));
+      }
+
+      // Yield event loop every 4 chunks (~2s of audio) to let OS message pump and IPC dispatch
+      if (chunkCount % 4 === 0) {
+        await new Promise((r) => setImmediate(r));
       }
     }
 
-    // Final result
-    const finalJsonStr = vosk_recognizer_final_result(recognizer);
-    if (finalJsonStr) {
-      try {
-        const parsed = JSON.parse(finalJsonStr);
-        if (Array.isArray(parsed.result)) {
-          for (const w of parsed.result) {
-            if (w.word) {
-              words.push({
-                text: w.word,
-                word: w.word,
-                start: w.start,
-                end: w.end,
-                conf: w.conf ?? 1.0,
-              });
+    if (!isCancelled || !isCancelled()) {
+      // Final result
+      const finalJsonStr = vosk_recognizer_final_result(recognizer);
+      if (finalJsonStr) {
+        try {
+          const parsed = JSON.parse(finalJsonStr);
+          if (Array.isArray(parsed.result)) {
+            for (const w of parsed.result) {
+              if (w.word) {
+                words.push({
+                  text: w.word,
+                  word: w.word,
+                  start: w.start,
+                  end: w.end,
+                  conf: w.conf ?? 1.0,
+                });
+              }
             }
           }
-        }
-        if (parsed.text) fullText += (fullText ? ' ' : '') + parsed.text;
-      } catch {}
+          if (parsed.text) fullText += (fullText ? ' ' : '') + parsed.text;
+        } catch {}
+      }
     }
   } finally {
     vosk_recognizer_free(recognizer);
   }
 
   return { words, text: fullText };
+}
+
+/**
+ * Transcribe 16kHz mono audio buffer using Vosk
+ * Automatically offloads to dedicated background worker thread to prevent UI freezing
+ *
+ * @param {string|object} modelPathOrOptions - Model path/ID or options object
+ * @param {ArrayBuffer|Float32Array|Int16Array|Buffer} audioData - Audio samples
+ * @param {number} sampleRate - Sample rate (defaults to 16000)
+ * @param {Function} onProgress - Progress callback (fraction 0..1)
+ * @returns {Promise<{ words: Array<{ word: string, start: number, end: number, conf: number }>, text: string }>}
+ */
+async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000, onProgress = null) {
+  let modelPath = modelPathOrOptions;
+  let rawAudio = audioData;
+  let sRate = sampleRate;
+  let progressCb = onProgress;
+
+  if (typeof modelPathOrOptions === 'object' && modelPathOrOptions !== null && !Array.isArray(modelPathOrOptions) && !Buffer.isBuffer(modelPathOrOptions) && !(modelPathOrOptions instanceof Uint8Array)) {
+    modelPath = modelPathOrOptions.modelPath || modelPathOrOptions.modelId || modelPathOrOptions.path;
+    rawAudio = modelPathOrOptions.audioData || modelPathOrOptions.audioBuffer;
+    sRate = modelPathOrOptions.sampleRate || 16000;
+    progressCb = modelPathOrOptions.onProgress || onProgress;
+  }
+
+  // Convert input to Int16 PCM Buffer for transferring to worker
+  let pcmBuffer;
+  if (rawAudio instanceof Float32Array) {
+    const pcm16 = new Int16Array(rawAudio.length);
+    for (let i = 0; i < rawAudio.length; i++) {
+      const s = Math.max(-1, Math.min(1, rawAudio[i]));
+      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    pcmBuffer = Buffer.from(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
+  } else if (rawAudio instanceof Int16Array) {
+    pcmBuffer = Buffer.from(rawAudio.buffer, rawAudio.byteOffset, rawAudio.byteLength);
+  } else if (Buffer.isBuffer(rawAudio)) {
+    pcmBuffer = rawAudio;
+  } else if (rawAudio instanceof ArrayBuffer || rawAudio instanceof Uint8Array) {
+    pcmBuffer = Buffer.from(rawAudio);
+  } else {
+    throw new Error('Unsupported audio data format passed to transcribeAudio');
+  }
+
+  // If in a worker thread itself, run in-process directly to avoid recursive workers
+  if (!isMainThread) {
+    return inProcessTranscribeAudio(modelPath, pcmBuffer, sRate, progressCb);
+  }
+
+  const worker = getOrCreateWorker();
+  if (worker) {
+    const taskId = ++activeTaskId;
+    return await new Promise((resolve, reject) => {
+      pendingWorkerTasks.set(taskId, { resolve, reject, onProgress: progressCb });
+      worker.postMessage({
+        type: 'transcribe',
+        id: taskId,
+        modelPath,
+        audioBuffer: pcmBuffer,
+        sampleRate: sRate,
+      });
+    });
+  }
+
+  // Fallback to in-process transcription with event-loop yielding
+  return inProcessTranscribeAudio(modelPath, pcmBuffer, sRate, progressCb);
 }
 
 module.exports = {
@@ -837,5 +1029,7 @@ module.exports = {
   importModelZip,
   deleteModel,
   transcribeAudio,
+  inProcessTranscribeAudio,
+  cancelTranscription,
   freeCachedModel,
 };

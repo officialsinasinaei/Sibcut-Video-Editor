@@ -228,7 +228,7 @@ describe('Generate captions in the Captions tab', () => {
     const tab = captionsTab(ctx);
     document.body.append(tab.el);
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const gen = [...tab.el.querySelectorAll('.cap-form button')].find((b) => b.textContent === 'Generate');
+    const gen = [...tab.el.querySelectorAll('.cap-form button')].find((b) => b.textContent.includes('Generate'));
     gen.click();
     await vi.waitFor(() => expect(store.project.tracks.flatMap((t) => t.clips).filter((c) => c.caption)).toHaveLength(1));
     expect(store.project.tracks.flatMap((t) => t.clips).find((c) => c.caption).text).toBe('Hello there');

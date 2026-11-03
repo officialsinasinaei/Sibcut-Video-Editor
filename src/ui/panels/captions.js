@@ -174,18 +174,36 @@ function styleControls(opts, save) {
 
 /** Steps with a progress bar and Cancel, for long caption jobs. setStep(i, fraction). */
 function stepProgress(steps, label) {
-  const stepEls = steps.map((s) => h('li.cap-step', h('span.cap-step-icon', { 'aria-hidden': 'true' }), h('span', s)));
+  const stepPctEls = [];
+  const stepEls = steps.map((s) => {
+    const iconSpan = h('span.cap-step-icon', { 'aria-hidden': 'true' });
+    const nameSpan = h('span.cap-step-name', s);
+    const pctSpan = h('span.cap-step-pct');
+    stepPctEls.push(pctSpan);
+    const textWrap = h('span.cap-step-text', nameSpan, pctSpan);
+    return h('li.cap-step', iconSpan, textWrap);
+  });
   const bar = h('div.cap-bar', { role: 'progressbar', 'aria-label': `${label} progress`, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, h('div.cap-bar-fill'));
+  const overallPct = h('span.cap-percent', '0%');
+  const barRow = h('div.cap-bar-row', bar, overallPct);
   const cancel = h('button.btn.small', { type: 'button' }, 'Cancel');
-  const el = h('div.cap-progress', { hidden: true, role: 'group', 'aria-label': label }, h('ol.cap-steps', stepEls), bar, h('div.cap-progress-foot', cancel));
+  const el = h('div.cap-progress', { hidden: true, role: 'group', 'aria-label': label }, h('ol.cap-steps', stepEls), barRow, h('div.cap-progress-foot', cancel));
   const setStep = (i, frac = 0) => {
     stepEls.forEach((li, j) => {
       li.dataset.state = j < i ? 'done' : j === i ? 'active' : 'todo';
       li.querySelector('.cap-step-icon').replaceChildren(j < i ? icon('check', 12) : j === i ? h('span.spinner.small') : '');
+      if (stepPctEls[j]) {
+        if (j === i && frac > 0) {
+          stepPctEls[j].textContent = `${Math.round(frac * 100)}%`;
+        } else {
+          stepPctEls[j].textContent = '';
+        }
+      }
     });
-    const pct = Math.round(((i + Math.min(1, frac)) / steps.length) * 100);
+    const pct = Math.min(100, Math.max(0, Math.round(((i + Math.min(1, frac)) / steps.length) * 100)));
     bar.setAttribute('aria-valuenow', String(pct));
     bar.firstChild.style.width = `${pct}%`;
+    overallPct.textContent = `${pct}%`;
   };
   return { el, cancel, setStep };
 }
@@ -332,7 +350,9 @@ function autoPanel(ctx, opts, save) {
   async function run() {
     if (abort) return;
 
-    if (!installedModels.length || !selectedModel) {
+    const isDevFake = Boolean(import.meta.env.DEV && globalThis.__vsFakeTranscript);
+
+    if ((!installedModels.length || !selectedModel) && !isDevFake) {
       toast('Please download or import a language model first.', { kind: 'info' });
       openVoskModelManager(ctx, {
         activeModelId: opts.voskModelId,
@@ -356,18 +376,27 @@ function autoPanel(ctx, opts, save) {
     const { signal } = abort;
     generate.disabled = true;
     progress.hidden = false;
+    setStep(0, 0);
+    requestAnimationFrame(() => {
+      progress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
     let said = -1;
 
     try {
       const n = await generateCaptions(ctx, {
         ...opts,
-        voskModelPath: selectedModel.path,
+        voskModelPath: selectedModel?.path || opts.voskModelPath,
       }, {
         mode,
         signal,
         onStep: (i, f) => {
           setStep(i, f);
-          if (i !== said) announce(STEPS[(said = i)]);
+          if (i !== said) {
+            announce(STEPS[(said = i)]);
+            requestAnimationFrame(() => {
+              progress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+          }
         },
       });
 

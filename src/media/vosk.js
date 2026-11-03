@@ -36,9 +36,13 @@ export async function listVoskModels(refreshOnline = false) {
     return await window.voskAPI.listModels(refreshOnline);
   }
 
-  const res = await fetch(`/api/vosk/models${refreshOnline ? '?refresh=true' : ''}`);
-  if (!res.ok) throw new Error('Failed to load Vosk models');
-  return await res.json();
+  try {
+    const res = await fetch(`/api/vosk/models${refreshOnline ? '?refresh=true' : ''}`);
+    if (!res.ok) return { installed: [], available: [] };
+    return await res.json();
+  } catch {
+    return { installed: [], available: [] };
+  }
 }
 
 /**
@@ -167,6 +171,21 @@ export function floatTo16BitPCM(float32Array) {
 }
 
 /**
+ * Cancel active Vosk transcription
+ */
+export async function cancelVoskTranscription() {
+  if (hasVoskIPC && window.voskAPI?.cancelTranscribe) {
+    try {
+      return await window.voskAPI.cancelTranscribe();
+    } catch {}
+    return;
+  }
+  try {
+    await fetch('/api/vosk/cancel-transcribe', { method: 'POST' });
+  } catch {}
+}
+
+/**
  * Transcribe float samples using a Vosk model
  */
 export async function transcribeWithVosk(modelPath, floatSamples, sampleRate = 16000, { onProgress, signal } = {}) {
@@ -180,30 +199,45 @@ export async function transcribeWithVosk(modelPath, floatSamples, sampleRate = 1
       });
     }
 
+    const abortHandler = () => {
+      cancelVoskTranscription().catch(() => {});
+    };
+    signal?.addEventListener('abort', abortHandler, { once: true });
+
     try {
       const res = await window.voskAPI.transcribe(modelPath, pcmBuffer, sampleRate);
       if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
       return res;
     } finally {
+      signal?.removeEventListener('abort', abortHandler);
       unsub?.();
     }
   }
 
   // Fallback via HTTP POST
-  const res = await fetch('/api/vosk/transcribe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'X-Model-Path': encodeURIComponent(modelPath),
-      'X-Sample-Rate': String(sampleRate),
-    },
-    body: pcmBuffer,
-    signal,
-  });
+  const abortHandler = () => {
+    cancelVoskTranscription().catch(() => {});
+  };
+  signal?.addEventListener('abort', abortHandler, { once: true });
 
-  if (!res.ok) {
-    throw new Error('Transcription failed: ' + (await res.text()));
+  try {
+    const res = await fetch('/api/vosk/transcribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Model-Path': encodeURIComponent(modelPath),
+        'X-Sample-Rate': String(sampleRate),
+      },
+      body: pcmBuffer,
+      signal,
+    });
+
+    if (!res.ok) {
+      throw new Error('Transcription failed: ' + (await res.text()));
+    }
+
+    return await res.json();
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
   }
-
-  return await res.json();
 }
