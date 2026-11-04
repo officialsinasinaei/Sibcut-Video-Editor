@@ -169,3 +169,201 @@ describe('timeline on phones', () => {
     tl.dispose();
   });
 });
+
+
+describe('playhead edge auto-scroll', () => {
+  function setupTimelineBounds(scroller, content, { width = 800, contentWidth = 50000 } = {}) {
+    Object.defineProperty(scroller, 'scrollWidth', { value: contentWidth, configurable: true, writable: true });
+    Object.defineProperty(scroller, 'clientWidth', { value: width, configurable: true, writable: true });
+    scroller.getBoundingClientRect = () => ({ left: 0, top: 0, right: width, bottom: 400, width, height: 400, x: 0, y: 0 });
+    content.getBoundingClientRect = () => {
+      const l = -scroller.scrollLeft;
+      return { left: l, top: 0, right: l + contentWidth, bottom: 400, width: contentWidth, height: 400, x: l, y: 0 };
+    };
+  }
+
+  it('scrolls the timeline and advances time when scrubbing against the right edge', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { store, tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+    scroller.scrollLeft = 0;
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+    expect(playheadCap).toBeTruthy();
+
+    pointer(playheadCap, 'pointerdown', 790, 20);
+    const initialTime = store.time;
+    const initialScroll = scroller.scrollLeft;
+
+    vi.advanceTimersByTime(50);
+
+    expect(scroller.scrollLeft).toBeGreaterThan(initialScroll);
+    expect(store.time).toBeGreaterThan(initialTime);
+
+    pointer(playheadCap, 'pointerup', 790, 20);
+    const timeAfterUp = store.time;
+    const scrollAfterUp = scroller.scrollLeft;
+    vi.advanceTimersByTime(50);
+    expect(scroller.scrollLeft).toBe(scrollAfterUp);
+    expect(store.time).toBe(timeAfterUp);
+
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('scrolls the timeline and rewinds time when scrubbing against the left edge, clamping at zero', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { store, tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+    scroller.scrollLeft = 500;
+
+    const ruler = tl.el.querySelector('.tl-ruler');
+    expect(ruler).toBeTruthy();
+
+    pointer(ruler, 'pointerdown', 10, 10);
+    const initialTime = store.time;
+    const initialScroll = scroller.scrollLeft;
+
+    vi.advanceTimersByTime(50);
+
+    expect(scroller.scrollLeft).toBeLessThan(initialScroll);
+    expect(store.time).toBeLessThan(initialTime);
+
+    // Continue scrolling until time hits 0
+    vi.advanceTimersByTime(2000);
+    expect(scroller.scrollLeft).toBe(0);
+    expect(store.time).toBe(0);
+
+    pointer(ruler, 'pointerup', 10, 10);
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('accelerates scroll speed progressively as pointer moves further past the edge', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+
+    // Gentle edge (clientX = 780, 20px inside 36px margin)
+    scroller.scrollLeft = 0;
+    pointer(playheadCap, 'pointerdown', 780, 20);
+    vi.advanceTimersByTime(48);
+    const slowDelta = scroller.scrollLeft;
+    pointer(playheadCap, 'pointerup', 780, 20);
+
+    // Aggressive edge (clientX = 850, 50px outside boundary)
+    scroller.scrollLeft = 0;
+    pointer(playheadCap, 'pointerdown', 850, 20);
+    vi.advanceTimersByTime(48);
+    const fastDelta = scroller.scrollLeft;
+    pointer(playheadCap, 'pointerup', 850, 20);
+
+    expect(fastDelta).toBeGreaterThan(slowDelta);
+
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('scrolls timeline during ruler marker dragging', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    p.markers = [{ id: 'm1', time: 10 * 1000000, label: 'Intro' }];
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+    scroller.scrollLeft = 0;
+
+    const ruler = tl.el.querySelector('.tl-ruler');
+    const markerX = 16 + (10 * tl.pps);
+
+    pointer(ruler, 'pointerdown', markerX, 10);
+    pointer(ruler, 'pointermove', 790, 10);
+
+    const initialScroll = scroller.scrollLeft;
+    vi.advanceTimersByTime(50);
+
+    expect(scroller.scrollLeft).toBeGreaterThan(initialScroll);
+    pointer(ruler, 'pointerup', 790, 10);
+
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('stops auto-scrolling when window loses focus (blur)', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+    scroller.scrollLeft = 0;
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+    pointer(playheadCap, 'pointerdown', 790, 20);
+    vi.advanceTimersByTime(50);
+    const scrollBeforeBlur = scroller.scrollLeft;
+    expect(scrollBeforeBlur).toBeGreaterThan(0);
+
+    // Trigger window blur
+    window.dispatchEvent(new Event('blur'));
+
+    vi.advanceTimersByTime(100);
+    expect(scroller.scrollLeft).toBe(scrollBeforeBlur);
+
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('clamps rightward scrolling at maxScroll without overshooting', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+
+    // Mock scrollWidth and clientWidth on scroller
+    Object.defineProperty(scroller, 'scrollWidth', { value: 1200, configurable: true });
+    Object.defineProperty(scroller, 'clientWidth', { value: 800, configurable: true });
+    // maxScroll is 1200 - 800 = 400
+    scroller.scrollLeft = 390;
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+    pointer(playheadCap, 'pointerdown', 790, 20);
+
+    vi.advanceTimersByTime(100);
+    expect(scroller.scrollLeft).toBe(400);
+
+    pointer(playheadCap, 'pointerup', 790, 20);
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
+  it('does not scroll rightward if timeline does not overflow (maxScroll is 0)', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 5));
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+
+    Object.defineProperty(scroller, 'scrollWidth', { value: 800, configurable: true });
+    Object.defineProperty(scroller, 'clientWidth', { value: 800, configurable: true });
+    scroller.scrollLeft = 0;
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+    pointer(playheadCap, 'pointerdown', 790, 20);
+
+    vi.advanceTimersByTime(100);
+    expect(scroller.scrollLeft).toBe(0);
+
+    pointer(playheadCap, 'pointerup', 790, 20);
+    tl.dispose();
+    vi.useRealTimers();
+  });
+});

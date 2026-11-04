@@ -35,3 +35,7 @@ _Avoid_: Repo cleaning, clutter removal, file purging
 **Model Asset Deduplication**:
 Maintaining a single canonical on-disk neural network binary under `src/media/models/` and importing it via bundler asset URL references, preventing duplicate copying into `public/` and eliminating redundant multi-megabyte payloads in the application package.
 _Avoid_: Model cleanup, onnx pruning
+
+**Playhead Edge Auto-Scroll**:
+Automatic horizontal scrolling of the timeline viewport when the user drags or scrubs the playhead against the visible viewport boundaries, advancing or rewinding playback time continuously without requiring manual scrollbar panning.
+_Avoid_: Playhead panning, edge bumping, timeline scrolling hack, side sticking

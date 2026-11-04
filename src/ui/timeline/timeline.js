@@ -1259,50 +1259,99 @@ export function createTimeline(ctx) {
     },
   };
 
-  // Edge auto-scroll while dragging.
+  // Edge auto-scroll while dragging clips, trimming, or scrubbing playhead/markers.
+  const EDGE_MARGIN = 36;
+  const MIN_SCROLL_V = 8;
+  const MAX_SCROLL_V = 36;
   let scrollTimer = null;
   let scrollV = 0;
-  function autoScroll(ev) {
+  let onScrollTick = null;
+
+  function calcScrollVelocity(distancePastEdge) {
+    const factor = Math.min(1, Math.max(0, distancePastEdge / (EDGE_MARGIN * 2)));
+    return MIN_SCROLL_V + Math.round(factor * (MAX_SCROLL_V - MIN_SCROLL_V));
+  }
+
+  function autoScroll(ev, onTick = null) {
+    onScrollTick = onTick;
     const r = scroller.getBoundingClientRect();
     const left = r.left + headerWidth();
-    scrollV = ev.clientX < left + 30 ? -12 : ev.clientX > r.right - 30 ? 12 : 0;
+    const right = r.right;
+    if (ev.clientX < left + EDGE_MARGIN) {
+      scrollV = -calcScrollVelocity((left + EDGE_MARGIN) - ev.clientX);
+    } else if (ev.clientX > right - EDGE_MARGIN) {
+      scrollV = calcScrollVelocity(ev.clientX - (right - EDGE_MARGIN));
+    } else {
+      scrollV = 0;
+    }
+
     if (scrollV && !scrollTimer) {
       scrollTimer = setInterval(() => {
-        scroller.scrollLeft += scrollV;
+        const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        if (scrollV < 0) {
+          if (scroller.scrollLeft <= 0) {
+            scroller.scrollLeft = 0;
+            if (onScrollTick) onScrollTick();
+            return;
+          }
+          scroller.scrollLeft = Math.max(0, scroller.scrollLeft + scrollV);
+        } else if (scrollV > 0) {
+          if (scroller.scrollLeft >= maxScroll) {
+            scroller.scrollLeft = maxScroll;
+            if (onScrollTick) onScrollTick();
+            return;
+          }
+          scroller.scrollLeft = Math.min(maxScroll, scroller.scrollLeft + scrollV);
+        }
+        if (onScrollTick) onScrollTick();
       }, 16);
-    } else if (!scrollV) stopAutoScroll();
+    } else if (!scrollV) {
+      stopAutoScroll();
+    }
   }
+
   function stopAutoScroll() {
     clearInterval(scrollTimer);
     scrollTimer = null;
+    scrollV = 0;
+    onScrollTick = null;
   }
-
   // Ruler and playhead scrubbing.
   function scrub(e) {
+    if (e.button !== 0) return;
     e.preventDefault();
     player.pause();
     const target = e.currentTarget;
-    target.setPointerCapture(e.pointerId);
+    try { target.setPointerCapture(e.pointerId); } catch {}
+    let lastEv = e;
     const at = (ev) => {
+      if (ev) lastEv = ev;
       const r = content.getBoundingClientRect();
-      let t = xToTime(ev.clientX - r.left);
-      if (store.toggles.snap && !ev.altKey) {
+      let t = xToTime(lastEv.clientX - r.left);
+      if (store.toggles.snap && !lastEv.altKey) {
         const pts = T.snapPoints(store.project, {});
         const s = T.snap(t, pts, snapThreshold());
         if (s.snapped) t = s.time;
       }
-      store.seek(snapToFrame(t, store.fps));
+      store.seek(snapToFrame(Math.max(0, t), store.fps));
     };
     at(e);
-    const move = (ev) => at(ev);
+    autoScroll(e, () => at(lastEv));
+    const move = (ev) => {
+      at(ev);
+      autoScroll(ev, () => at(lastEv));
+    };
     const up = () => {
+      stopAutoScroll();
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
       target.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
     target.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
   }
   /** Marker under a ruler x (client coordinates), within a few pixels. */
   function markerAt(clientX) {
@@ -1330,29 +1379,38 @@ export function createTimeline(ctx) {
     }
     e.preventDefault();
     player.pause();
-    ruler.setPointerCapture(e.pointerId);
+    try { ruler.setPointerCapture(e.pointerId); } catch {}
     const x0 = e.clientX;
     const t0 = m.time;
     const points = T.snapPoints(store.project, { playhead: store.time }).filter((p) => p !== t0);
     let moved = false;
     let to = t0;
-    const move = (ev) => {
-      if (!moved && Math.abs(ev.clientX - x0) < 3) return;
-      moved = true;
-      let t = Math.max(0, t0 + ((ev.clientX - x0) / pps) * US);
-      if (store.toggles.snap !== ev.altKey) {
+    let lastMarkerEv = e;
+    const updateMarker = (ev) => {
+      if (ev) lastMarkerEv = ev;
+      const r = content.getBoundingClientRect();
+      let t = Math.max(0, xToTime(lastMarkerEv.clientX - r.left));
+      if (store.toggles.snap !== lastMarkerEv.altKey) {
         const sn = T.snap(t, points, snapThreshold());
         if (sn.snapped) t = sn.time;
       }
       to = snapToFrame(t, store.fps);
       m.time = to; // live preview; committed as one edit on release
       drawRulerNow();
-      tip.show(ev, `Marker ${timecode(to, store.fps)}`);
+      tip.show(lastMarkerEv, `Marker ${timecode(to, store.fps)}`);
+    };
+    const move = (ev) => {
+      if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+      moved = true;
+      updateMarker(ev);
+      autoScroll(ev, () => updateMarker(lastMarkerEv));
     };
     const up = () => {
+      stopAutoScroll();
       ruler.removeEventListener('pointermove', move);
       ruler.removeEventListener('pointerup', up);
       ruler.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
       tip.hide();
       if (!moved) {
         store.seek(m.time);
@@ -1365,6 +1423,7 @@ export function createTimeline(ctx) {
     ruler.addEventListener('pointermove', move);
     ruler.addEventListener('pointerup', up);
     ruler.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
   });
   ruler.addEventListener('pointermove', (e) => {
     const m = e.buttons ? null : markerAt(e.clientX);
