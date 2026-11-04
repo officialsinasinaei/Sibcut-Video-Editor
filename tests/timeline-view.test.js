@@ -194,6 +194,7 @@ describe('playhead edge auto-scroll', () => {
     expect(playheadCap).toBeTruthy();
 
     pointer(playheadCap, 'pointerdown', 790, 20);
+    pointer(playheadCap, 'pointermove', 790, 20);
     const initialTime = store.time;
     const initialScroll = scroller.scrollLeft;
 
@@ -213,6 +214,25 @@ describe('playhead edge auto-scroll', () => {
     vi.useRealTimers();
   });
 
+  it('does not auto-scroll on a static click without pointer movement', () => {
+    vi.useFakeTimers();
+    const p = fixture();
+    onMain(p, clip('video', 0, 300));
+    const { tl, content, scroller, pointer } = mountTimeline(p);
+    setupTimelineBounds(scroller, content);
+    scroller.scrollLeft = 0;
+
+    const playheadCap = tl.el.querySelector('.tl-playhead-cap');
+    pointer(playheadCap, 'pointerdown', 790, 20);
+    vi.advanceTimersByTime(100);
+
+    expect(scroller.scrollLeft).toBe(0);
+
+    pointer(playheadCap, 'pointerup', 790, 20);
+    tl.dispose();
+    vi.useRealTimers();
+  });
+
   it('scrolls the timeline and rewinds time when scrubbing against the left edge, clamping at zero', () => {
     vi.useFakeTimers();
     const p = fixture();
@@ -225,6 +245,7 @@ describe('playhead edge auto-scroll', () => {
     expect(ruler).toBeTruthy();
 
     pointer(ruler, 'pointerdown', 10, 10);
+    pointer(ruler, 'pointermove', 10, 10);
     const initialTime = store.time;
     const initialScroll = scroller.scrollLeft;
 
@@ -255,6 +276,7 @@ describe('playhead edge auto-scroll', () => {
     // Gentle edge (clientX = 780, 20px inside 36px margin)
     scroller.scrollLeft = 0;
     pointer(playheadCap, 'pointerdown', 780, 20);
+    pointer(playheadCap, 'pointermove', 780, 20);
     vi.advanceTimersByTime(48);
     const slowDelta = scroller.scrollLeft;
     pointer(playheadCap, 'pointerup', 780, 20);
@@ -262,6 +284,7 @@ describe('playhead edge auto-scroll', () => {
     // Aggressive edge (clientX = 850, 50px outside boundary)
     scroller.scrollLeft = 0;
     pointer(playheadCap, 'pointerdown', 850, 20);
+    pointer(playheadCap, 'pointermove', 850, 20);
     vi.advanceTimersByTime(48);
     const fastDelta = scroller.scrollLeft;
     pointer(playheadCap, 'pointerup', 850, 20);
@@ -272,12 +295,12 @@ describe('playhead edge auto-scroll', () => {
     vi.useRealTimers();
   });
 
-  it('scrolls timeline during ruler marker dragging', () => {
+  it('scrolls timeline during ruler marker dragging and clamps marker at project duration', () => {
     vi.useFakeTimers();
     const p = fixture();
-    onMain(p, clip('video', 0, 300));
+    onMain(p, clip('video', 0, 30));
     p.markers = [{ id: 'm1', time: 10 * 1000000, label: 'Intro' }];
-    const { tl, content, scroller, pointer } = mountTimeline(p);
+    const { store, tl, content, scroller, pointer } = mountTimeline(p);
     setupTimelineBounds(scroller, content);
     scroller.scrollLeft = 0;
 
@@ -293,6 +316,10 @@ describe('playhead edge auto-scroll', () => {
     expect(scroller.scrollLeft).toBeGreaterThan(initialScroll);
     pointer(ruler, 'pointerup', 790, 10);
 
+    // Marker time should not exceed project duration
+    const m = store.project.markers.find((x) => x.id === 'm1');
+    expect(m.time).toBeLessThanOrEqual(store.duration);
+
     tl.dispose();
     vi.useRealTimers();
   });
@@ -307,6 +334,7 @@ describe('playhead edge auto-scroll', () => {
 
     const playheadCap = tl.el.querySelector('.tl-playhead-cap');
     pointer(playheadCap, 'pointerdown', 790, 20);
+    pointer(playheadCap, 'pointermove', 790, 20);
     vi.advanceTimersByTime(50);
     const scrollBeforeBlur = scroller.scrollLeft;
     expect(scrollBeforeBlur).toBeGreaterThan(0);
@@ -328,14 +356,13 @@ describe('playhead edge auto-scroll', () => {
     const { tl, content, scroller, pointer } = mountTimeline(p);
     setupTimelineBounds(scroller, content);
 
-    // Mock scrollWidth and clientWidth on scroller
     Object.defineProperty(scroller, 'scrollWidth', { value: 1200, configurable: true });
     Object.defineProperty(scroller, 'clientWidth', { value: 800, configurable: true });
-    // maxScroll is 1200 - 800 = 400
     scroller.scrollLeft = 390;
 
     const playheadCap = tl.el.querySelector('.tl-playhead-cap');
     pointer(playheadCap, 'pointerdown', 790, 20);
+    pointer(playheadCap, 'pointermove', 790, 20);
 
     vi.advanceTimersByTime(100);
     expect(scroller.scrollLeft).toBe(400);
@@ -358,6 +385,7 @@ describe('playhead edge auto-scroll', () => {
 
     const playheadCap = tl.el.querySelector('.tl-playhead-cap');
     pointer(playheadCap, 'pointerdown', 790, 20);
+    pointer(playheadCap, 'pointermove', 790, 20);
 
     vi.advanceTimersByTime(100);
     expect(scroller.scrollLeft).toBe(0);

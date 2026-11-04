@@ -1,6 +1,6 @@
 # Issue 01: Playhead Edge Auto-Scroll
 
-Status: ready-for-human
+Status: resolved
 Type: task
 
 ## Description

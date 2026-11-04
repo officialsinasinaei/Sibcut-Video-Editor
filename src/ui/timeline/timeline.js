@@ -1005,6 +1005,7 @@ export function createTimeline(ctx) {
       tracksEl.removeEventListener('pointermove', move);
       tracksEl.removeEventListener('pointerup', up);
       tracksEl.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
       showSnap(null);
       insertLine.hidden = true;
       drag = null;
@@ -1017,6 +1018,7 @@ export function createTimeline(ctx) {
     tracksEl.addEventListener('pointermove', move);
     tracksEl.addEventListener('pointerup', up);
     tracksEl.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
   }
 
   function startTrim(e, id, edge, p0) {
@@ -1063,6 +1065,7 @@ export function createTimeline(ctx) {
       tracksEl.removeEventListener('pointermove', move);
       tracksEl.removeEventListener('pointerup', up);
       tracksEl.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
       node.classList.remove('trimming');
       showSnap(null);
       tip.hide();
@@ -1078,6 +1081,7 @@ export function createTimeline(ctx) {
     tracksEl.addEventListener('pointermove', move);
     tracksEl.addEventListener('pointerup', up);
     tracksEl.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
   }
 
   // ---- Touch input ------------------------------------------------------
@@ -1267,8 +1271,8 @@ export function createTimeline(ctx) {
   let scrollV = 0;
   let onScrollTick = null;
 
-  function calcScrollVelocity(distancePastEdge) {
-    const factor = Math.min(1, Math.max(0, distancePastEdge / (EDGE_MARGIN * 2)));
+  function calcScrollVelocity(penetrationDepth) {
+    const factor = Math.min(1, Math.max(0, penetrationDepth / (EDGE_MARGIN * 2)));
     return MIN_SCROLL_V + Math.round(factor * (MAX_SCROLL_V - MIN_SCROLL_V));
   }
 
@@ -1291,14 +1295,12 @@ export function createTimeline(ctx) {
         if (scrollV < 0) {
           if (scroller.scrollLeft <= 0) {
             scroller.scrollLeft = 0;
-            if (onScrollTick) onScrollTick();
             return;
           }
           scroller.scrollLeft = Math.max(0, scroller.scrollLeft + scrollV);
         } else if (scrollV > 0) {
           if (scroller.scrollLeft >= maxScroll) {
             scroller.scrollLeft = maxScroll;
-            if (onScrollTick) onScrollTick();
             return;
           }
           scroller.scrollLeft = Math.min(maxScroll, scroller.scrollLeft + scrollV);
@@ -1316,6 +1318,7 @@ export function createTimeline(ctx) {
     scrollV = 0;
     onScrollTick = null;
   }
+
   // Ruler and playhead scrubbing.
   function scrub(e) {
     if (e.button !== 0) return;
@@ -1336,7 +1339,6 @@ export function createTimeline(ctx) {
       store.seek(snapToFrame(Math.max(0, t), store.fps));
     };
     at(e);
-    autoScroll(e, () => at(lastEv));
     const move = (ev) => {
       at(ev);
       autoScroll(ev, () => at(lastEv));
@@ -1353,6 +1355,7 @@ export function createTimeline(ctx) {
     target.addEventListener('pointercancel', up);
     window.addEventListener('blur', up);
   }
+
   /** Marker under a ruler x (client coordinates), within a few pixels. */
   function markerAt(clientX) {
     const r = content.getBoundingClientRect();
@@ -1389,10 +1392,11 @@ export function createTimeline(ctx) {
     const updateMarker = (ev) => {
       if (ev) lastMarkerEv = ev;
       const r = content.getBoundingClientRect();
-      let t = Math.max(0, xToTime(lastMarkerEv.clientX - r.left));
+      const maxTime = Math.max(0, store.duration);
+      let t = clamp(xToTime(lastMarkerEv.clientX - r.left), 0, maxTime);
       if (store.toggles.snap !== lastMarkerEv.altKey) {
         const sn = T.snap(t, points, snapThreshold());
-        if (sn.snapped) t = sn.time;
+        if (sn.snapped) t = clamp(sn.time, 0, maxTime);
       }
       to = snapToFrame(t, store.fps);
       m.time = to; // live preview; committed as one edit on release
