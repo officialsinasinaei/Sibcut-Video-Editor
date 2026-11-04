@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.3] - 2026-11-04
+
+### Added
+- **Playhead Edge Auto-Scroll**: Implemented smooth, progressive auto-scrolling when scrubbing or dragging the playhead, time ruler, or chapter markers against the visible timeline viewport edges.
+  - Continuous per-tick time updates allow users to scrub forward or backward across multi-minute timelines without needing manual scrollbar manipulation.
+  - Progressive velocity acceleration scales dynamically from 8px/tick (precision positioning) to 36px/tick (fast navigation) based on pointer penetration depth over a 36px threshold zone.
+  - Strict boundary clamping guards the start at `00:00:00:00` and stops cleanly at timeline extent without overshoot or scrolling on non-overflowing viewports.
+  - Comprehensive safety teardown handles `pointerup`, `pointercancel`, and window `blur` events across playhead scrubbing, marker dragging, clip dragging, and edge trimming.
+
 ## [1.0.2] - 2026-11-04
 
 ### Changed & Performance Improvements
