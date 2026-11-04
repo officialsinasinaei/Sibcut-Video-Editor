@@ -31,6 +31,45 @@ const voskService = require('./vosk-service.cjs');
 const { setupVoskIPC, handleVoskHttp } = require('./electron-vosk-ipc.cjs');
 const { getPortableDir, isWritable, setupProjectsIPC } = require('./electron-projects-ipc.cjs');
 
+// ─── Single-Instance Guard ────────────────────────────────────────────────────
+// Prevents multiple concurrent processes from contending over the portable
+// extraction directory or user data directories.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+// ─── Lazy Native Vosk Engine ─────────────────────────────────────────────────
+let voskInitialized = false;
+function ensureVoskInit() {
+  if (voskInitialized) return;
+  voskInitialized = true;
+  try {
+    voskService.init(app);
+  } catch (err) {
+    console.error('[Main] Vosk init error:', err);
+  }
+}
+
+const lazyVoskService = {
+  initNativeLibrary: () => { ensureVoskInit(); return voskService.initNativeLibrary(); },
+  listAllModels: (...args) => { ensureVoskInit(); return voskService.listAllModels(...args); },
+  downloadModel: (...args) => { ensureVoskInit(); return voskService.downloadModel(...args); },
+  cancelDownload: (...args) => { ensureVoskInit(); return voskService.cancelDownload(...args); },
+  importModelZip: (...args) => { ensureVoskInit(); return voskService.importModelZip(...args); },
+  deleteModel: (...args) => { ensureVoskInit(); return voskService.deleteModel(...args); },
+  transcribeAudioFile: (...args) => { ensureVoskInit(); return voskService.transcribeAudioFile(...args); },
+  getActiveJobs: (...args) => { ensureVoskInit(); return voskService.getActiveJobs(...args); },
+};
+
 // ─── Portable UserData Configuration ──────────────────────────────────────────
 const PORTABLE_DIR = getPortableDir(app);
 const userDataDir = path.join(PORTABLE_DIR, 'data');
@@ -202,7 +241,7 @@ function startServer() {
     const server = http.createServer((req, res) => {
       // Handle Vosk API endpoints
       if (req.url.startsWith('/api/vosk/')) {
-        handleVoskHttp(req, res, voskService);
+        handleVoskHttp(req, res, lazyVoskService);
         return;
       }
 
@@ -373,7 +412,11 @@ async function createWindow() {
   });
 
   // Show the window once the page has rendered (avoids white flash)
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    // Warm up native Vosk background service 1.5s after window presentation
+    setTimeout(ensureVoskInit, 1500);
+  });
 
   // Persist window bounds on close / resize / move
   const persistState = () => saveWindowState(mainWindow);
@@ -511,13 +554,8 @@ app.whenReady().then(async () => {
   // Initialize native project storage IPC handlers
   setupProjectsIPC(ipcMain, app, () => mainWindow);
 
-  // Initialize Vosk offline speech recognition service and IPC handlers
-  try {
-    voskService.init(app);
-    setupVoskIPC(ipcMain, voskService);
-  } catch (err) {
-    console.error('[Main] Vosk init error:', err);
-  }
+  // Initialize Vosk offline speech recognition IPC handlers with lazy backing
+  setupVoskIPC(ipcMain, lazyVoskService);
 
   const { port } = await startServer();
   serverPort = port;
