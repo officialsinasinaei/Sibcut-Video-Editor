@@ -27,3 +27,11 @@ _Avoid_: Dependency pruning, tree cleaning
 **Single-Instance Guard**:
 An application-level lock mechanism that restricts the process to a single active instance, redirecting subsequent invocations to the running window and preventing lock contention in shared directories.
 _Avoid_: Mutex check, double-click guard
+
+**Repository Hygiene**:
+The systematic removal of duplicate binaries, orphaned scratch scripts, and non-runtime evaluation artifacts from the version control tree while keeping all production, build, and test assets intact.
+_Avoid_: Repo cleaning, clutter removal, file purging
+
+**Model Asset Deduplication**:
+Maintaining a single canonical on-disk neural network binary under `src/media/models/` and importing it via bundler asset URL references, preventing duplicate copying into `public/` and eliminating redundant multi-megabyte payloads in the application package.
+_Avoid_: Model cleanup, onnx pruning

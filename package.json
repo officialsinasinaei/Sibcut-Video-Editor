@@ -101,7 +101,9 @@
       "electron-vosk-ipc.cjs",
       "electron-projects-ipc.cjs",
       "native/**",
-      "assets/branding/**",
+      "assets/branding/app-icons/**",
+      "assets/branding/master/app-icon-master.png",
+      "assets/branding/tray/**",
       "build/icon.*",
       "build/icons/**"
     ],

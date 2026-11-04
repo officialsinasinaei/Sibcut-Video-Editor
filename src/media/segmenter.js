@@ -42,15 +42,9 @@ export function resetRecurrentState() {
 }
 
 const model = lazyModel(async () => {
-  let buffer;
-  try {
-    const res = await fetch(modelUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    buffer = await res.arrayBuffer();
-  } catch {
-    const res = await fetch('./models/rvm_mobilenetv3.onnx');
-    buffer = await res.arrayBuffer();
-  }
+  const res = await fetch(modelUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buffer = await res.arrayBuffer();
 
   const session = await ort.InferenceSession.create(buffer, {
     executionProviders: ['wasm'],

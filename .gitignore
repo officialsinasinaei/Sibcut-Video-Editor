@@ -51,11 +51,10 @@ blob-report/
 playwright/.cache/
 screenshot-*.png
 
-# Local Verification Scripts & Organizing Directories
+# Local Verification Scripts
 tools/test-*.cjs
 tools/verify-*.cjs
-imagesfororganizing/
-htmlfilestotunntoextention/
+!tools/verify-rebrand.cjs
 
 # Operating System Files
 .DS_Store
