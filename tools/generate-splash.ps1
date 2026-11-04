@@ -16,7 +16,10 @@ $borderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(39, 
 $g.DrawRectangle($borderPen, 0, 0, $width - 1, $height - 1)
 
 # Icon
-$iconPath = Join-Path $PSScriptRoot "..\icon.png"
+$iconPath = Join-Path $PSScriptRoot "..\build\icon.png"
+if (-not (Test-Path $iconPath)) {
+    $iconPath = Join-Path $PSScriptRoot "..\assets\branding\master\app-icon-master.png"
+}
 if (Test-Path $iconPath) {
     $iconImg = [System.Drawing.Image]::FromFile($iconPath)
     $iconSize = 100

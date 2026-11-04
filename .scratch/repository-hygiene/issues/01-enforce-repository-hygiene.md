@@ -1,4 +1,4 @@
-# Issue 01: Audit and Prune Unnecessary Repository Files
+# Issue 01: Enforce Repository Hygiene and Model Asset Deduplication
 
 Status: resolved
 Type: task

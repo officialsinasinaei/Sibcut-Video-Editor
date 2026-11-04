@@ -4,7 +4,7 @@
 An audit of the repository identified redundant binaries, scratch development tools, and package leaks that degraded repository hygiene without contributing to application functionality:
 1. Root-level loose icons (`icon.png` and `icon-128.png`) duplicated existing branding assets in `assets/branding/`.
 2. A 14.28 MB ONNX neural network model (`rvm_mobilenetv3.onnx`) was stored in both `public/models/` and `src/media/models/`. Because `public/` assets are copied verbatim into `dist/` by Vite while `src/media/models/` is processed through the bundler, the exact same 15 MB model was packaged twice in `dist/` and `app.asar`.
-3. Development screenshot scripts with hardcoded user machine paths (`C:\Users\AMAJ PC\...`) were checked into `tools/`.
+3. Development screenshot scripts with hardcoded user machine paths (`C:\Users\<user>\...`) were checked into `tools/`.
 4. Dead generator scripts referencing missing temporary folders were checked into `tools/`.
 5. `tools/verify-rebrand.cjs` was unintentionally ignored from version control due to a wildcard in `.gitignore`.
 6. Non-runtime rebrand comparison images in `assets/branding/previews/` were being packaged into `app.asar` via `"assets/branding/**"`.

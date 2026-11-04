@@ -1,4 +1,4 @@
-# Specification: Repository Hygiene & Unnecessary File Pruning
+# Specification: Repository Hygiene & Model Asset Deduplication
 
 ## Objective
 Audit and remove superfluous, duplicate, and obsolete development artifacts from the GitHub repository to match professional engineering standards, while strictly safeguarding all functional video editor logic, UI layouts, test suites, and build pipelines.
@@ -14,7 +14,7 @@ Audit and remove superfluous, duplicate, and obsolete development artifacts from
    - `tools/take-screenshots.cjs`
    - `tools/take-effect-keyframe-screenshots.cjs`
    - `tools/take-farsi-screenshots.cjs`
-   - All contain hardcoded paths like `C:\Users\AMAJ PC\...` and are not part of CI or testing.
+   - All contain hardcoded paths like `C:\Users\<user>\...` and are not part of CI or testing.
 4. **Obsolete Asset Generation Tools**:
    - `tools/generate-category-previews.ps1` — Relies on non-existent `imagesfororganizing` directory.
    - `tools/make-ico.cjs` — Legacy ICO generator superseded by the approved icon assets.
