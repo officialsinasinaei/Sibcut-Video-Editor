@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2026-11-04
+
+### Changed & Performance Improvements
+- **Portable Launch & Package Optimization**: Configured persistent unpack caching (`unpackDirName: "SibcutVideoEditor"`) and Deflate archive extraction (`useZip: true`), slashing portable warm launch times from 10–25s to <1s.
+- **Cold Launch Splash Screen**: Added a 480×280 24-bit dark branded splash screen (`build/splash.bmp`) for instant visual feedback during cold launch decompression.
+- **Production Bundle Isolation**: Segregated 25+ web dependencies into `devDependencies`, eliminating raw `node_modules` duplicates from `app.asar` and shrinking the ASAR payload from 551 MB down to ~170 MB.
+- **Deferred Native FFI Initialization**: Deferred native Vosk C-library FFI loading to 1.5s post-window presentation via dynamic Proxy adapter, unblocking first paint by 200–500ms.
+- **Single-Instance Guard**: Enforced `app.requestSingleInstanceLock()` with synchronous exit to prevent concurrent process collisions in portable unpack directories.
+- **Model Asset Deduplication**: Deduplicated ONNX background matting model (`rvm_mobilenetv3.onnx`), eliminating duplicate 15 MB payload in `dist/` and `app.asar`.
+- **Repository Hygiene**: Pruned 91 MB of duplicate WASM runtimes from `public/assets/`, removed loose root icons, and isolated Electron packaging from design comparison previews.
+- **Packaging Guardrails & CI**: Introduced `tools/check-packaging.mjs` with automated unit tests to enforce bundle isolation and a 200 MB ASAR budget ceiling on every build.
+
 ## [1.0.1] - 2026-11-03
 
 ### Fixed
