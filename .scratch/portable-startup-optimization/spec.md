@@ -12,7 +12,7 @@
 - Modifying UI components, layouts, CSS styling, or functional video editing logic.
 
 ## Implementation Steps
-1. **Dependency Segregation**: Move web-only packages from `dependencies` to `devDependencies` in `package.json`, keeping only `koffi` and `yauzl` as runtime dependencies.
+1. **Production Bundle Isolation**: Move web-only packages from `dependencies` to `devDependencies` in `package.json`, keeping only `koffi` and `yauzl` as runtime dependencies.
 2. **Asset Deduplication**: Remove duplicated `ort-wasm-simd-threaded.*` files from `public/assets/`.
 3. **Build & Portable Configuration**:
    - Set `portable.unpackDirName` to `SibcutVideoEditor`.

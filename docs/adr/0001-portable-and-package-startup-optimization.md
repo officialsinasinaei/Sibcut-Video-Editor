@@ -5,7 +5,7 @@ The portable distribution `Sibcut-Video-Editor-Portable.exe` suffered from 10–
 
 ## Decision
 1. **Persistent Portable Unpack Directory (`unpackDirName`)**: Set `portable.unpackDirName` to `SibcutVideoEditor` and configure `portable.splashImage` with a branded bitmap. This transforms every launch after the first into an instant Warm Launch (<1 second).
-2. **Production Dependency Isolation**: Move all Vite-bundled web packages (`@fontsource/*`, `onnxruntime-web`, `@mediapipe/tasks-vision`, `lucide`, `mediabunny`, and font packages) to `devDependencies`. Only native/Electron main runtime dependencies (`koffi`, `yauzl`) remain in `dependencies`.
+2. **Production Bundle Isolation**: Move all Vite-bundled web packages (`@fontsource/*`, `onnxruntime-web`, `@mediapipe/tasks-vision`, `lucide`, `mediabunny`, and font packages) to `devDependencies`. Only native/Electron main runtime dependencies (`koffi`, `yauzl`) remain in `dependencies`.
 3. **Deferred Native Initialization**: Defer `voskService.init(app)` until after the browser window is shown, keeping first paint completely unblocked.
 4. **WASM & Asset Deduplication**: Prune duplicate WASM runtime binaries from `public/assets/` to ensure single-copy packaging.
 5. **Single Instance Guard**: Enforce `app.requestSingleInstanceLock()` to prevent concurrent process collisions against the persistent unpack directory.

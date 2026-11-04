@@ -59,16 +59,18 @@ function ensureVoskInit() {
   }
 }
 
-const lazyVoskService = {
-  initNativeLibrary: () => { ensureVoskInit(); return voskService.initNativeLibrary(); },
-  listAllModels: (...args) => { ensureVoskInit(); return voskService.listAllModels(...args); },
-  downloadModel: (...args) => { ensureVoskInit(); return voskService.downloadModel(...args); },
-  cancelDownload: (...args) => { ensureVoskInit(); return voskService.cancelDownload(...args); },
-  importModelZip: (...args) => { ensureVoskInit(); return voskService.importModelZip(...args); },
-  deleteModel: (...args) => { ensureVoskInit(); return voskService.deleteModel(...args); },
-  transcribeAudioFile: (...args) => { ensureVoskInit(); return voskService.transcribeAudioFile(...args); },
-  getActiveJobs: (...args) => { ensureVoskInit(); return voskService.getActiveJobs(...args); },
-};
+const lazyVoskService = new Proxy(voskService, {
+  get(target, prop) {
+    const val = target[prop];
+    if (typeof val === 'function') {
+      return (...args) => {
+        ensureVoskInit();
+        return val.apply(target, args);
+      };
+    }
+    return val;
+  },
+});
 
 // ─── Portable UserData Configuration ──────────────────────────────────────────
 const PORTABLE_DIR = getPortableDir(app);

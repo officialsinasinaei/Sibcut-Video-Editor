@@ -32,6 +32,7 @@
     "electron:dev": "npm run build:electron && electron .",
     "electron:pack": "npm run build:electron && electron-builder --win",
     "electron:pack:portable": "npm run build:electron && electron-builder --win portable",
+    "electron:pack:portable:zip": "npm run build:electron && electron-builder --win zip",
     "electron:pack:zip": "npm run build:electron && electron-builder --win zip",
     "electron:pack:installer": "npm run build:electron && electron-builder --win nsis",
     "electron:pack:mac": "npm run build:electron && electron-builder --mac",
