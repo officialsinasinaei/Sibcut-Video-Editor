@@ -441,6 +441,9 @@ async function createWindow() {
       console.log('[SMOKE-TEST] Window rendered and displayed successfully.');
       // Verify native Vosk engine initialization
       try {
+        if (typeof voskService.init === 'function') {
+          voskService.init(app);
+        }
         if (voskService.isNativeSupported(process.platform)) {
           const voskOk = voskService.initNativeLibrary();
           if (!voskOk) {

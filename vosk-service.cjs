@@ -105,20 +105,26 @@ function getNativeLibraryDir(platform = process.platform) {
     }
   }
 
-  // 2. Search candidate package/app directories
+  // 2. Search candidate package/app directories (prefer unpacked physical directories)
   const execDir = process.execPath ? path.dirname(process.execPath) : '';
+  const isAsar = __dirname.includes('app.asar');
+  const unpackedBase = isAsar
+    ? __dirname.replace(/app\.asar.*$/, 'app.asar.unpacked')
+    : path.join(__dirname, '..', 'app.asar.unpacked');
+
   const candidateDirs = [
-    path.join(__dirname, cfg.platformDir),
-    path.join(__dirname.replace(/app\.asar[\\/]?$/, 'app.asar.unpacked'), cfg.platformDir),
-    path.join(__dirname, '..', 'app.asar.unpacked', cfg.platformDir),
+    path.join(unpackedBase, cfg.platformDir),
     path.join(process.resourcesPath || '', 'app.asar.unpacked', cfg.platformDir),
-    path.join(process.resourcesPath || '', cfg.platformDir),
     path.join(execDir, 'resources', 'app.asar.unpacked', cfg.platformDir),
+    ...(!isAsar ? [path.join(__dirname, cfg.platformDir)] : []),
+    path.join(process.resourcesPath || '', cfg.platformDir),
     path.join(execDir, cfg.platformDir),
   ];
 
   let foundDir = null;
   for (const dir of candidateDirs) {
+    // Dynamic linkers (Windows LoadLibrary, Unix dlopen) cannot load native binaries from inside virtual ASAR archives
+    if (dir.includes('app.asar') && !dir.includes('app.asar.unpacked')) continue;
     if (fs.existsSync(path.join(dir, cfg.primaryFile))) {
       foundDir = dir;
       break;
