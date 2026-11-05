@@ -137,7 +137,7 @@ jobs:
       - name: Package macOS Apple Silicon application
         shell: bash
         run: |
-          EXTRA_BUILDER_ARGS=""
+          EXTRA_BUILDER_ARGS="-c.npmRebuild=false"
           if [ -z "${CSC_LINK:-}" ]; then
             echo "No CSC_LINK certificate secret configured. Setting mac.identity=null to skip code signing."
             unset CSC_LINK
@@ -145,7 +145,7 @@ jobs:
             unset APPLE_ID
             unset APPLE_APP_SPECIFIC_PASSWORD
             unset APPLE_TEAM_ID
-            EXTRA_BUILDER_ARGS="-c.mac.identity=null"
+            EXTRA_BUILDER_ARGS="-c.mac.identity=null -c.npmRebuild=false"
           fi
           npx electron-builder --mac --arm64 --publish never $EXTRA_BUILDER_ARGS
         env:
@@ -195,8 +195,10 @@ jobs:
           node-version: '22.12.0'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies and x64 native addons
+        run: |
+          npm ci
+          npm install --no-save --force @koromix/koffi-darwin-x64@3.3.4
 
       - name: Hydrate native speech engine binaries
         run: node tools/fetch-native-vosk.mjs
@@ -212,7 +214,7 @@ jobs:
       - name: Package macOS Intel application
         shell: bash
         run: |
-          EXTRA_BUILDER_ARGS=""
+          EXTRA_BUILDER_ARGS="-c.npmRebuild=false"
           if [ -z "${CSC_LINK:-}" ]; then
             echo "No CSC_LINK certificate secret configured. Setting mac.identity=null to skip code signing."
             unset CSC_LINK
@@ -220,7 +222,7 @@ jobs:
             unset APPLE_ID
             unset APPLE_APP_SPECIFIC_PASSWORD
             unset APPLE_TEAM_ID
-            EXTRA_BUILDER_ARGS="-c.mac.identity=null"
+            EXTRA_BUILDER_ARGS="-c.mac.identity=null -c.npmRebuild=false"
           fi
           npx electron-builder --mac --x64 --publish never $EXTRA_BUILDER_ARGS
         env:
