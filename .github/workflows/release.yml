@@ -135,7 +135,17 @@ jobs:
         run: npm run build:electron
 
       - name: Package macOS Apple Silicon application
-        run: npx electron-builder --mac --arm64 --publish never
+        shell: bash
+        run: |
+          if [ -z "${CSC_LINK:-}" ]; then
+            echo "CSC_LINK secret is empty. Unsetting credentials to enable ad-hoc open-source packaging."
+            unset CSC_LINK
+            unset CSC_KEY_PASSWORD
+            unset APPLE_ID
+            unset APPLE_APP_SPECIFIC_PASSWORD
+            unset APPLE_TEAM_ID
+          fi
+          npx electron-builder --mac --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -149,11 +159,13 @@ jobs:
           DMG_PATH=$(find release -maxdepth 1 -name "*arm64.dmg" | head -n 1)
           echo "Found DMG: $DMG_PATH"
           echo "Mounting disk image..."
-          hdiutil attach "$DMG_PATH" -mountpoint /Volumes/SibcutArm64 -nobrowse
+          MOUNT_LINE=$(hdiutil attach "$DMG_PATH" -nobrowse | grep "/Volumes")
+          MOUNT_DIR=$(echo "$MOUNT_LINE" | awk -F'\t' '{print $NF}' | tr -d '\r')
+          echo "Mounted volume: $MOUNT_DIR"
           echo "Running Electron smoke test on mounted bundle..."
-          /Volumes/SibcutArm64/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" --smoke-test --no-sandbox
+          "$MOUNT_DIR"/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" --smoke-test --no-sandbox
           echo "Smoke test passed successfully. Unmounting..."
-          hdiutil detach /Volumes/SibcutArm64
+          hdiutil detach "$MOUNT_DIR" -force
 
       - name: Stage macOS arm64 artifacts
         run: |
@@ -196,7 +208,17 @@ jobs:
         run: npm run build:electron
 
       - name: Package macOS Intel application
-        run: npx electron-builder --mac --x64 --publish never
+        shell: bash
+        run: |
+          if [ -z "${CSC_LINK:-}" ]; then
+            echo "CSC_LINK secret is empty. Unsetting credentials to enable ad-hoc open-source packaging."
+            unset CSC_LINK
+            unset CSC_KEY_PASSWORD
+            unset APPLE_ID
+            unset APPLE_APP_SPECIFIC_PASSWORD
+            unset APPLE_TEAM_ID
+          fi
+          npx electron-builder --mac --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -210,11 +232,13 @@ jobs:
           DMG_PATH=$(find release -maxdepth 1 -name "*x64.dmg" | head -n 1)
           echo "Found Intel DMG: $DMG_PATH"
           echo "Mounting disk image..."
-          hdiutil attach "$DMG_PATH" -mountpoint /Volumes/SibcutX64 -nobrowse
+          MOUNT_LINE=$(hdiutil attach "$DMG_PATH" -nobrowse | grep "/Volumes")
+          MOUNT_DIR=$(echo "$MOUNT_LINE" | awk -F'\t' '{print $NF}' | tr -d '\r')
+          echo "Mounted volume: $MOUNT_DIR"
           echo "Verifying x86_64 Mach-O architecture..."
-          file /Volumes/SibcutX64/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" | grep -E "x86_64"
+          file "$MOUNT_DIR"/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" | grep -E "x86_64"
           echo "Architecture verified. Unmounting..."
-          hdiutil detach /Volumes/SibcutX64
+          hdiutil detach "$MOUNT_DIR" -force
 
       - name: Stage macOS x64 artifacts
         run: |
@@ -246,6 +270,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libx11-dev libxext-dev xvfb
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64 || true
 
       - name: Install dependencies
         run: npm ci
@@ -268,11 +293,16 @@ jobs:
 
       - name: Verify Linux AppImage via Headless Smoke Test
         run: |
+          UNPACKED_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable 2>/dev/null | head -n 1)
+          if [ -n "$UNPACKED_BIN" ]; then
+            echo "Executing unpacked Linux binary: $UNPACKED_BIN"
+            xvfb-run --auto-servernum "$UNPACKED_BIN" --smoke-test --no-sandbox
+          fi
           APPIMAGE=$(find release -maxdepth 1 -name "*.AppImage" | head -n 1)
           echo "Found AppImage: $APPIMAGE"
           chmod +x "$APPIMAGE"
-          echo "Executing AppImage with xvfb smoke test..."
-          xvfb-run --auto-servernum "$APPIMAGE" --smoke-test --no-sandbox
+          echo "Executing AppImage with xvfb extract-and-run smoke test..."
+          xvfb-run --auto-servernum "$APPIMAGE" --appimage-extract-and-run --smoke-test --no-sandbox
 
       - name: Stage Linux artifacts
         run: |

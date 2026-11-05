@@ -35,4 +35,23 @@ describe('Electron Smoke-Test Argument & Lifecycle Configuration', () => {
     expect(pkg.scripts['electron:pack:mac:arm64']).toBeDefined();
     expect(pkg.scripts['electron:pack:mac:x64']).toBeDefined();
   });
+
+  it('validates release.yml workflow guards against empty code-signing secrets and FUSE requirements', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const root = path.resolve(import.meta.dirname, '..');
+    const releaseYamlPath = path.join(root, '.github', 'workflows', 'release.yml');
+
+    expect(fs.existsSync(releaseYamlPath)).toBe(true);
+    const content = fs.readFileSync(releaseYamlPath, 'utf8');
+
+    // macOS empty secret guard
+    expect(content).toContain('unset CSC_LINK');
+    expect(content).toContain('unset CSC_KEY_PASSWORD');
+    expect(content).toContain('MOUNT_LINE=$(hdiutil attach "$DMG_PATH" -nobrowse | grep "/Volumes")');
+
+    // Linux FUSE & AppImage extract-and-run guard
+    expect(content).toContain('--appimage-extract-and-run');
+    expect(content).toContain('libfuse2');
+  });
 });
