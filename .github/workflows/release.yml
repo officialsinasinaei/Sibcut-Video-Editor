@@ -137,15 +137,17 @@ jobs:
       - name: Package macOS Apple Silicon application
         shell: bash
         run: |
+          EXTRA_BUILDER_ARGS=""
           if [ -z "${CSC_LINK:-}" ]; then
-            echo "CSC_LINK secret is empty. Unsetting credentials to enable ad-hoc open-source packaging."
+            echo "No CSC_LINK certificate secret configured. Setting mac.identity=null to skip code signing."
             unset CSC_LINK
             unset CSC_KEY_PASSWORD
             unset APPLE_ID
             unset APPLE_APP_SPECIFIC_PASSWORD
             unset APPLE_TEAM_ID
+            EXTRA_BUILDER_ARGS="-c.mac.identity=null"
           fi
-          npx electron-builder --mac --arm64 --publish never
+          npx electron-builder --mac --arm64 --publish never $EXTRA_BUILDER_ARGS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -210,15 +212,17 @@ jobs:
       - name: Package macOS Intel application
         shell: bash
         run: |
+          EXTRA_BUILDER_ARGS=""
           if [ -z "${CSC_LINK:-}" ]; then
-            echo "CSC_LINK secret is empty. Unsetting credentials to enable ad-hoc open-source packaging."
+            echo "No CSC_LINK certificate secret configured. Setting mac.identity=null to skip code signing."
             unset CSC_LINK
             unset CSC_KEY_PASSWORD
             unset APPLE_ID
             unset APPLE_APP_SPECIFIC_PASSWORD
             unset APPLE_TEAM_ID
+            EXTRA_BUILDER_ARGS="-c.mac.identity=null"
           fi
-          npx electron-builder --mac --x64 --publish never
+          npx electron-builder --mac --x64 --publish never $EXTRA_BUILDER_ARGS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ${{ secrets.CSC_LINK }}

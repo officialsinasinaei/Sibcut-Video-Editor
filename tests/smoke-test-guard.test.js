@@ -48,6 +48,7 @@ describe('Electron Smoke-Test Argument & Lifecycle Configuration', () => {
     // macOS empty secret guard
     expect(content).toContain('unset CSC_LINK');
     expect(content).toContain('unset CSC_KEY_PASSWORD');
+    expect(content).toContain('-c.mac.identity=null');
     expect(content).toContain('MOUNT_LINE=$(hdiutil attach "$DMG_PATH" -nobrowse | grep "/Volumes")');
 
     // Linux FUSE & AppImage extract guard
