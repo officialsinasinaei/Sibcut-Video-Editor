@@ -122,11 +122,31 @@ function getNativeDllDir() {
 }
 
 /**
+ * Check if the host operating system currently has bundled native Vosk libraries.
+ * Currently win32 (x86_64) is bundled; macOS (.dylib) and Linux (.so) are in development.
+ */
+function isPlatformSupported(platform = process.platform) {
+  return platform === 'win32';
+}
+
+function isNativeSupported(platform = process.platform) {
+  return isPlatformSupported(platform);
+}
+
+/**
  * Locate and load libvosk.dll with Koffi
  */
-function initNativeLibrary() {
+function initNativeLibrary(targetPlatform = process.platform) {
+  if (!isPlatformSupported(targetPlatform)) {
+    const msg = `Native speech recognition is currently not bundled for ${targetPlatform}.`;
+    console.info('[Vosk]', msg);
+    lastNativeLoadError = new Error(msg);
+    return false;
+  }
+
   if (libvosk) return true;
   lastNativeLoadError = null;
+
   if (!koffi) {
     try {
       koffi = require('koffi');
@@ -1021,6 +1041,8 @@ async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000
 module.exports = {
   init,
   initNativeLibrary,
+  isPlatformSupported,
+  isNativeSupported,
   listInstalledModels,
   listAllModels,
   getCatalog,

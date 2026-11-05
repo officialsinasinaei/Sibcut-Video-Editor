@@ -12,6 +12,21 @@ describe('Vosk Speech Recognition Service & Worker', () => {
     expect(ok).toBe(true);
   });
 
+  it('handles non-Windows platforms gracefully without throwing', () => {
+    expect(typeof voskService.isPlatformSupported).toBe('function');
+    expect(typeof voskService.isNativeSupported).toBe('function');
+    expect(voskService.isPlatformSupported('win32')).toBe(true);
+    expect(voskService.isNativeSupported('win32')).toBe(true);
+    expect(voskService.isPlatformSupported('darwin')).toBe(false);
+    expect(voskService.isNativeSupported('darwin')).toBe(false);
+    expect(voskService.isPlatformSupported('linux')).toBe(false);
+    expect(voskService.isNativeSupported('linux')).toBe(false);
+
+    // Explicitly testing non-win32 target platform behavior
+    expect(voskService.initNativeLibrary('darwin')).toBe(false);
+    expect(voskService.initNativeLibrary('linux')).toBe(false);
+  });
+
   it('scans models directory correctly', () => {
     voskService.init({
       getPath: () => 'D:\\apps\\Sibcut Video Editor\\data',

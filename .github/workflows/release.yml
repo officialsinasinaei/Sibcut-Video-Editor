@@ -44,7 +44,7 @@ jobs:
           fi
 
   build-windows:
-    name: Build Windows (Setup & Portable)
+    name: Build Windows (Setup & Portable) & Smoke Test
     needs: validate-version
     runs-on: windows-latest
     steps:
@@ -60,8 +60,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify licenses
-        run: npm run check:licenses
+      - name: Verify licenses and packaging guardrails
+        shell: pwsh
+        run: |
+          npm run check:licenses
+          npm run check:packaging
 
       - name: Build Electron application
         run: npm run build:electron
@@ -70,6 +73,11 @@ jobs:
         run: npx electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Verify Windows Package via Smoke Test
+        shell: pwsh
+        run: |
+          npx electron . --smoke-test
 
       - name: Validate Windows release artifacts
         shell: pwsh
@@ -95,8 +103,8 @@ jobs:
           path: dist-release/*
           if-no-files-found: error
 
-  build-macos:
-    name: Build macOS (Apple Silicon arm64)
+  build-macos-arm64:
+    name: Build macOS (Apple Silicon arm64) & Smoke Test
     needs: validate-version
     runs-on: macos-latest
     steps:
@@ -112,31 +120,107 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify licenses
-        run: npm run check:licenses
+      - name: Verify licenses and packaging
+        run: |
+          npm run check:licenses
+          npm run check:packaging
 
       - name: Build Electron application
         run: npm run build:electron
 
-      - name: Package macOS application
+      - name: Package macOS Apple Silicon application
         run: npx electron-builder --mac --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Stage macOS artifacts
+      - name: Verify macOS arm64 DMG via Headless Smoke Test
+        run: |
+          DMG_PATH=$(find release -maxdepth 1 -name "*arm64.dmg" | head -n 1)
+          echo "Found DMG: $DMG_PATH"
+          echo "Mounting disk image..."
+          hdiutil attach "$DMG_PATH" -mountpoint /Volumes/SibcutArm64 -nobrowse
+          echo "Running Electron smoke test on mounted bundle..."
+          /Volumes/SibcutArm64/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" --smoke-test --no-sandbox
+          echo "Smoke test passed successfully. Unmounting..."
+          hdiutil detach /Volumes/SibcutArm64
+
+      - name: Stage macOS arm64 artifacts
         run: |
           mkdir -p dist-release
-          find release -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" \) -exec cp {} dist-release/ \;
+          find release -maxdepth 1 -type f \( -name "*arm64.dmg" -o -name "*arm64.zip" \) -exec cp {} dist-release/ \;
 
-      - name: Upload macOS artifacts
+      - name: Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts
+          name: macos-arm64-artifacts
+          path: dist-release/*
+          if-no-files-found: error
+
+  build-macos-x64:
+    name: Build macOS (Intel x64) & Integrity Check
+    needs: validate-version
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify licenses and packaging
+        run: |
+          npm run check:licenses
+          npm run check:packaging
+
+      - name: Build Electron application
+        run: npm run build:electron
+
+      - name: Package macOS Intel application
+        run: npx electron-builder --mac --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify macOS x64 Package Architecture & Integrity
+        run: |
+          DMG_PATH=$(find release -maxdepth 1 -name "*x64.dmg" | head -n 1)
+          echo "Found Intel DMG: $DMG_PATH"
+          echo "Mounting disk image..."
+          hdiutil attach "$DMG_PATH" -mountpoint /Volumes/SibcutX64 -nobrowse
+          echo "Verifying x86_64 Mach-O architecture..."
+          file /Volumes/SibcutX64/"Sibcut Video Editor.app"/Contents/MacOS/"Sibcut Video Editor" | grep -E "x86_64"
+          echo "Architecture verified. Unmounting..."
+          hdiutil detach /Volumes/SibcutX64
+
+      - name: Stage macOS x64 artifacts
+        run: |
+          mkdir -p dist-release
+          find release -maxdepth 1 -type f \( -name "*x64.dmg" -o -name "*x64.zip" \) -exec cp {} dist-release/ \;
+
+      - name: Upload macOS x64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-artifacts
           path: dist-release/*
           if-no-files-found: error
 
   build-linux:
-    name: Build Linux (AppImage & DEB)
+    name: Build Linux (AppImage & DEB) & Smoke Test
     needs: validate-version
     runs-on: ubuntu-latest
     steps:
@@ -149,16 +233,18 @@ jobs:
           node-version: '22.12.0'
           cache: 'npm'
 
-      - name: Install Linux build dependencies
+      - name: Install Linux build dependencies & Xvfb
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxext-dev
+          sudo apt-get install -y libasound2-dev libx11-dev libxext-dev xvfb
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify licenses
-        run: npm run check:licenses
+      - name: Verify licenses and packaging
+        run: |
+          npm run check:licenses
+          npm run check:packaging
 
       - name: Build Electron application
         run: npm run build:electron
@@ -167,6 +253,14 @@ jobs:
         run: npx electron-builder --linux --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Verify Linux AppImage via Headless Smoke Test
+        run: |
+          APPIMAGE=$(find release -maxdepth 1 -name "*.AppImage" | head -n 1)
+          echo "Found AppImage: $APPIMAGE"
+          chmod +x "$APPIMAGE"
+          echo "Executing AppImage with xvfb smoke test..."
+          xvfb-run --auto-servernum "$APPIMAGE" --smoke-test --no-sandbox
 
       - name: Stage Linux artifacts
         run: |
@@ -182,7 +276,7 @@ jobs:
 
   publish:
     name: Aggregate Checksums & Publish GitHub Release
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos-arm64, build-macos-x64, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -225,9 +319,18 @@ jobs:
             | **Windows** | x64 | **`Sibcut-Video-Editor-Setup.exe`** | **Recommended installer** (Start menu, desktop shortcuts, uninstaller) |
             | **Windows** | x64 | `Sibcut-Video-Editor-Portable.exe` | Standalone portable (no installation, run anywhere/USB) |
             | **macOS** | Apple Silicon (`arm64`) | **`Sibcut-Video-Editor-macOS-arm64.dmg`** | **Recommended macOS download** (M1/M2/M3/M4 Macs) |
-            | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.zip` | Standalone application bundle archive |
+            | **macOS** | Apple Silicon (`arm64`) | `Sibcut-Video-Editor-macOS-arm64.zip` | Standalone application bundle archive (Apple Silicon) |
+            | **macOS** | Intel (`x64`) | **`Sibcut-Video-Editor-macOS-x64.dmg`** | **Recommended macOS download** (Intel Macs) |
+            | **macOS** | Intel (`x64`) | `Sibcut-Video-Editor-macOS-x64.zip` | Standalone application bundle archive (Intel) |
             | **Linux** | x64 | **`Sibcut-Video-Editor-Linux-x64.AppImage`** | **Recommended Linux download** (runs directly on all distros) |
             | **Linux** | x64 | `Sibcut-Video-Editor-Linux-x64.deb` | Debian / Ubuntu / Linux Mint package |
+
+            > [!TIP]
+            > **macOS Gatekeeper First-Launch Note (Open-Source Build):**  
+            > If macOS shows *"Sibcut Video Editor is damaged and can't be opened"*, this is Apple's Gatekeeper quarantine on downloaded internet files. Clear the quarantine attribute by opening **Terminal** and running:
+            > ```bash
+            > xattr -cr "/Applications/Sibcut Video Editor.app"
+            > ```
 
             ### Verification
             Every download can be verified using the accompanying `SHA256SUMS.txt` file.

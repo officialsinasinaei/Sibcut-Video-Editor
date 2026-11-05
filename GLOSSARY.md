@@ -39,3 +39,19 @@ _Avoid_: Model cleanup, onnx pruning
 **Playhead Edge Auto-Scroll**:
 Automatic horizontal scrolling of the timeline viewport when the user drags or scrubs the playhead against the visible viewport boundaries, advancing or rewinding playback time continuously without requiring manual scrollbar panning.
 _Avoid_: Playhead panning, edge bumping, timeline scrolling hack, side sticking
+
+**Gatekeeper Quarantine**:
+The macOS security enforcement mechanism applied via the `com.apple.quarantine` extended attribute on files downloaded from the web, requiring either an Apple Developer ID signature and notarization ticket or an explicit user bypass via `xattr -cr`.
+_Avoid_: Mac corruption, broken download, Apple lock, damaged binary bug
+
+**Headless Release Smoke Test**:
+An automated post-packaging verification stage executed in CI virtual machines (e.g. GitHub Actions `macos-latest` or `ubuntu-latest`) that unpacks or mounts distribution artifacts, validates binary structures, and launches the packaged Electron application headlessly to confirm startup viability prior to publication.
+_Avoid_: Manual Mac testing, local verification, launch sanity check
+
+**Dual-Architecture macOS Packaging**:
+Packaging discrete application bundles and DMGs for Apple Silicon (`arm64`) and Intel (`x64`) architectures independently, avoiding native C/FFI module fat-binary merge conflicts while maintaining optimal payload size for each hardware platform.
+_Avoid_: Universal binary hack, fat installer, all-mac package
+
+**Native Capability Guard**:
+A runtime check that verifies the availability and platform compatibility of native dynamic libraries (such as C/FFI shared objects or DLLs) before invoking native bindings, cleanly disabling dependent UI features when the platform is unsupported rather than terminating the process with an unhandled exception.
+_Avoid_: DLL try-catch, native crash fix, OS check hack

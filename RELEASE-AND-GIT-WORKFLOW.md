@@ -49,8 +49,9 @@ git push origin v1.0.1
 
 Once pushed, GitHub Actions automatically compiles, packages, hashes, and publishes:
 - **Windows**: `Sibcut-Video-Editor-Setup.exe` (NSIS) and `Sibcut-Video-Editor-Portable.exe`
-- **macOS**: `Sibcut-Video-Editor-macOS-arm64.dmg` and `Sibcut-Video-Editor-macOS-arm64.zip`
-- **Linux**: `Sibcut-Video-Editor-Linux-x86_64.AppImage` and `Sibcut-Video-Editor-Linux-amd64.deb`
+- **macOS Apple Silicon**: `Sibcut-Video-Editor-macOS-arm64.dmg` and `Sibcut-Video-Editor-macOS-arm64.zip`
+- **macOS Intel**: `Sibcut-Video-Editor-macOS-x64.dmg` and `Sibcut-Video-Editor-macOS-x64.zip`
+- **Linux**: `Sibcut-Video-Editor-Linux-x64.AppImage` and `Sibcut-Video-Editor-Linux-x64.deb`
 - **Checksums**: Master `SHA256SUMS.txt` verified across all binaries
 
 ---
@@ -153,19 +154,20 @@ The repository uses two workflows located in `.github/workflows/`:
 ### 4.1 Continuous Integration: `.github/workflows/ci.yml`
 - **Trigger**: Every push or Pull Request targeting `main`.
 - **Jobs**:
-  - `lint-and-validate`: Runs `npm run check:licenses` and `npm run build` on `ubuntu-latest`.
-  - `build-electron-check`: Matrix test compiling the Electron bundle on `windows-latest`, `macos-latest`, and `ubuntu-latest`.
+  - `lint-and-validate`: Runs `npm run check:licenses`, `npm run check:packaging`, and `npm run build` on `ubuntu-latest`.
+  - `build-electron-check`: Matrix test compiling the bundle and executing the headless `--smoke-test` across `windows-latest`, `macos-latest`, and `ubuntu-latest` (under `xvfb-run`).
 - **Permissions**: Least-privilege `contents: read`.
 
 ### 4.2 Release Pipeline: `.github/workflows/release.yml`
 - **Trigger**: Pushing any tag matching `v*` (e.g. `v1.0.0`) **OR** manually via `workflow_dispatch` in the GitHub UI.
 - **Permissions**: `contents: write` (required to publish release binaries and upload assets).
-- **Matrix Architecture**:
+- **Matrix Architecture & Strict Release Gate**:
   1. `validate-version`: Ubuntu runner validates that the tag name (e.g. `v1.0.1`) exactly matches `"version"` in `package.json`. If they differ, the workflow immediately aborts to prevent mismatched releases.
-  2. `build-windows`: `windows-latest` runner compiles worker, frontend, and runs `npx electron-builder --win --publish never`. Packages both NSIS installer (`Setup.exe`) and standalone portable (`Portable.exe`).
-  3. `build-macos`: `macos-latest` (Apple Silicon `arm64`) compiles and runs `npx electron-builder --mac --arm64 --publish never`. Packages both `.dmg` disk image and `.zip` bundle.
-  4. `build-linux`: `ubuntu-latest` compiles and runs `npx electron-builder --linux --x64 --publish never`. Packages standalone `.AppImage` and `.deb`.
-  5. `publish`: Runs after all platform builds succeed. Downloads all artifacts using `actions/download-artifact@v4` with `merge-multiple: true`, calculates and validates master `SHA256SUMS.txt`, and publishes via `softprops/action-gh-release@v2`.
+  2. `build-windows`: `windows-latest` runner packages `Setup.exe` and `Portable.exe`, runs an automated `--smoke-test`, and stages verified binaries.
+  3. `build-macos-arm64`: `macos-latest` runner packages Apple Silicon `arm64.dmg` and `zip`, mounts the DMG via `hdiutil attach`, executes the full `--smoke-test` on the mounted app bundle, and unmounts.
+  4. `build-macos-x64`: `macos-latest` runner packages Intel `x64.dmg` and `zip`, mounts the DMG, and verifies Mach-O x86_64 architecture and bundle integrity.
+  5. `build-linux`: `ubuntu-latest` runner packages `.AppImage` and `.deb`, executes an automated headless `--smoke-test` under `xvfb-run`, and stages verified binaries.
+  6. `publish`: Runs **only after all 4 platform build & smoke-test jobs succeed**. Downloads all artifacts with `merge-multiple: true`, calculates and validates master `SHA256SUMS.txt`, and publishes via `softprops/action-gh-release@v2`.
 
 ### 4.3 Critical Rules for Electron-Builder in CI
 > [!CAUTION]
@@ -173,6 +175,7 @@ The repository uses two workflows located in `.github/workflows/`:
 > ```bash
 > npx electron-builder --win --publish never
 > npx electron-builder --mac --arm64 --publish never
+> npx electron-builder --mac --x64 --publish never
 > npx electron-builder --linux --x64 --publish never
 > ```
 > In CI, `electron-builder` automatically tries to publish to GitHub if it detects a Git tag. If credentials are not explicitly supplied to its internal publisher, it will crash **after** building the files. Let our dedicated `publish` job handle release publication.
@@ -180,6 +183,42 @@ The repository uses two workflows located in `.github/workflows/`:
 > [!WARNING]
 > **NEVER use `macos-13` as a runner label.**  
 > GitHub officially retired the legacy Intel `macos-13` runner fleet. Jobs specifying `macos-13` will hang indefinitely in the queue with *"Waiting for a runner to pick up this job..."*. Always use `macos-latest` (Apple Silicon `arm64`).
+
+### 4.4 macOS Gatekeeper Quarantine Runbook
+On modern macOS (Ventura 13+, Sonoma 14+, Sequoia 15+), files downloaded from a web browser receive the `com.apple.quarantine` extended attribute. Without an Apple Developer ID Application certificate (\$99/yr) and an Apple Notarization ticket, Gatekeeper refuses to execute the application and displays a misleading warning: *"Sibcut Video Editor is damaged and can't be opened. You should move it to the Bin."*
+
+#### Immediate User Resolution:
+To clear the quarantine flag, run in Terminal:
+```bash
+xattr -cr "/Applications/Sibcut Video Editor.app"
+```
+
+#### Apple Developer ID Signing (Turnkey in CI):
+When Apple Developer Program credentials become available, simply set these GitHub Repository Secrets:
+- `CSC_LINK`: Base64-encoded `.p12` Developer ID Application certificate.
+- `CSC_KEY_PASSWORD`: Password for the `.p12` certificate.
+- `APPLE_ID`: Your Apple Developer email.
+- `APPLE_APP_SPECIFIC_PASSWORD`: Generated app-specific password from appleid.apple.com.
+- `APPLE_TEAM_ID`: 10-character Apple Developer Team ID.
+
+The CI workflow `.github/workflows/release.yml` will automatically discover these secrets and invoke Apple notarytool notarization and ticket stapling with zero script modifications.
+
+### 4.5 Automated Headless Smoke Testing Runbook
+The `--smoke-test` command-line switch enables CI virtual machines (and local developers) to verify complete application startup health deterministically:
+
+```bash
+# 1. Compile worker and web assets
+npm run build:electron
+
+# 2. Run local headless smoke test
+npx electron . --smoke-test
+```
+
+**Lifecycle Guarantees:**
+- Electron main process boots the localhost HTTP server, initializes IPC channels, and creates the window.
+- The window waits for `'ready-to-show'`, logs `[SMOKE-TEST] App launched successfully, exiting with code 0`, and calls `app.exit(0)` after 2000ms.
+- Any unhandled exception or unhandled promise rejection immediately terminates the process with code 1.
+- In CI (`.github/workflows/release.yml`), all 4 platform smoke tests must pass with exit code 0 or release publication is completely blocked.
 
 ---
 

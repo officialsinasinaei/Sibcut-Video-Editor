@@ -114,7 +114,15 @@ Download the latest official build for your platform from the Releases page:
 3. Drag **Sibcut Video Editor** into your **Applications** folder.
 4. Open the application from Launchpad or Finder.
 
-> **macOS Security Notice**: Because community builds are not notarized through an Apple Developer ID, macOS Gatekeeper may show a warning on first launch. To permit the app, open **System Settings** → **Privacy & Security**, scroll down to the security section, and click **Open Anyway**.
+> **macOS Gatekeeper First-Launch Note (Open-Source Build)**:  
+> Because community builds are not notarized through an Apple Developer ID (\$99/yr), modern macOS Gatekeeper may show a prompt saying *"Sibcut Video Editor is damaged and can't be opened. You should move it to the Bin."*  
+> This is Apple's quarantine flag on files downloaded from web browsers, not actual damage. To open the app:
+> 1. Open **Terminal** on your Mac.
+> 2. Run:
+>    ```bash
+>    xattr -cr "/Applications/Sibcut Video Editor.app"
+>    ```
+> 3. Alternatively, you can go to **System Settings** → **Privacy & Security** and click **Open Anyway**.
 
 ---
 

@@ -29,6 +29,9 @@ jobs:
       - name: Verify open-source licenses
         run: npm run check:licenses
 
+      - name: Verify packaging guardrails
+        run: npm run check:packaging
+
       - name: Build web assets
         run: npm run build
 
@@ -54,10 +57,18 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxext-dev
+          sudo apt-get install -y libasound2-dev libx11-dev libxext-dev xvfb
 
       - name: Install dependencies
         run: npm ci
 
       - name: Compile worker and frontend
         run: npm run build:electron
+
+      - name: Execute Electron Smoke Test (Linux xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npx electron . --smoke-test --no-sandbox
+
+      - name: Execute Electron Smoke Test (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: npx electron . --smoke-test --no-sandbox

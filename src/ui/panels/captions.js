@@ -38,6 +38,7 @@ import { openVoskModelManager, getLangEmoji } from './vosk-models-dialog.js';
 import '../../styles/audio.css';
 
 const DEFAULT_OPTS = { language: 'auto', scope: 'main', preset: 'yellow-caption', maxWords: 5, position: 'bottom', lyricsStyle: LYRIC_STYLE, lyricsPosition: 'bottom', lyricsIsolate: true, voskModelId: null, voskModelPath: null };
+const NON_WINDOWS_VOSK_NOTICE = 'Offline AI speech-to-text is currently supported on Windows. macOS and Linux support is coming in a future update.';
 
 const isCaption = (c) => c.type === 'text' && c.caption;
 
@@ -218,6 +219,7 @@ function autoPanel(ctx, opts, save) {
 
   let installedModels = [];
   let selectedModel = null;
+  let isVoskEngineAvailable = true;
 
   const modelPickerWrap = h('div.vosk-model-picker');
   const scope = segmented({
@@ -246,6 +248,21 @@ function autoPanel(ctx, opts, save) {
 
   function renderModelPicker() {
     modelPickerWrap.replaceChildren();
+
+    if (!isVoskEngineAvailable) {
+      const noticeCard = h('div.vosk-no-models-card',
+        h('div.vosk-no-models-icon', icon('info', 20)),
+        h('h4.vosk-no-models-title', 'Offline Speech-to-Text Notice'),
+        h('p.vosk-no-models-desc', `${NON_WINDOWS_VOSK_NOTICE} You can still import SRT files, stylize captions, and manually edit subtitles.`)
+      );
+      generate.disabled = true;
+      generate.title = NON_WINDOWS_VOSK_NOTICE;
+      modelPickerWrap.append(noticeCard);
+      return;
+    }
+
+    generate.disabled = false;
+    generate.title = '';
 
     if (!installedModels.length) {
       // Empty state card encouraging model download or import
@@ -333,6 +350,12 @@ function autoPanel(ctx, opts, save) {
 
   async function refreshModels(preferredId = null) {
     try {
+      isVoskEngineAvailable = await isVoskAvailable();
+      if (!isVoskEngineAvailable) {
+        installedModels = [];
+        renderModelPicker();
+        return;
+      }
       const data = await listVoskModels(false);
       installedModels = data.installed || [];
       if (preferredId) {
@@ -349,6 +372,11 @@ function autoPanel(ctx, opts, save) {
 
   async function run() {
     if (abort) return;
+
+    if (!isVoskEngineAvailable) {
+      toast(NON_WINDOWS_VOSK_NOTICE, { kind: 'info' });
+      return;
+    }
 
     const isDevFake = Boolean(import.meta.env.DEV && globalThis.__vsFakeTranscript);
 

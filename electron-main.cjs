@@ -31,11 +31,32 @@ const voskService = require('./vosk-service.cjs');
 const { setupVoskIPC, handleVoskHttp } = require('./electron-vosk-ipc.cjs');
 const { getPortableDir, isWritable, setupProjectsIPC } = require('./electron-projects-ipc.cjs');
 
-// ─── Single-Instance Guard ────────────────────────────────────────────────────
+// ─── Single-Instance Guard & Smoke-Test Detection ──────────────────────────────
+// Detect deterministic CI smoke test runs
+const isSmokeTest = process.argv.includes('--smoke-test') || process.env.ELECTRON_SMOKE_TEST === '1';
+
+if (isSmokeTest) {
+  console.log('[SMOKE-TEST] Launching in automated verification mode...');
+  process.on('uncaughtException', (err) => {
+    console.error('[SMOKE-TEST-FATAL] Uncaught exception:', err);
+    app.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[SMOKE-TEST-FATAL] Unhandled rejection:', reason);
+    app.exit(1);
+  });
+  // Safety watchdog: abort if ready-to-show is not reached within 20s
+  const watchdog = setTimeout(() => {
+    console.error('[SMOKE-TEST-FATAL] Timed out waiting for ready-to-show after 20s');
+    app.exit(1);
+  }, 20000);
+  watchdog.unref();
+}
+
 // Prevents multiple concurrent processes from contending over the portable
 // extraction directory or user data directories.
 const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
+if (!gotTheLock && !isSmokeTest) {
   app.quit();
   process.exit(0);
 }
@@ -416,6 +437,14 @@ async function createWindow() {
   // Show the window once the page has rendered (avoids white flash)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (isSmokeTest) {
+      console.log('[SMOKE-TEST] Window rendered and displayed successfully.');
+      setTimeout(() => {
+        console.log('[SMOKE-TEST] App launched successfully, exiting with code 0');
+        app.exit(0);
+      }, 2000);
+      return;
+    }
     // Warm up native Vosk background service 1.5s after window presentation
     setTimeout(ensureVoskInit, 1500);
   });
@@ -565,10 +594,12 @@ app.whenReady().then(async () => {
   buildMenu();
   await createWindow();
 
-  // Quietly check for updates 4 seconds after launch
-  setTimeout(() => {
-    checkForUpdates(mainWindow, false);
-  }, 4000);
+  // Quietly check for updates 4 seconds after launch (skipped in smoke tests)
+  if (!isSmokeTest) {
+    setTimeout(() => {
+      checkForUpdates(mainWindow, false);
+    }, 4000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
