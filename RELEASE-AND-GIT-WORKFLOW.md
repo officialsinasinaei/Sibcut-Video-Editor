@@ -222,6 +222,63 @@ npx electron . --smoke-test
 - Any unhandled exception or unhandled promise rejection immediately terminates the process with code 1.
 - In CI (`.github/workflows/release.yml`), all 4 platform smoke tests must pass with exit code 0 or release publication is completely blocked.
 
+### 4.6 macOS Ad-Hoc Identity & Empty Secret Sanitization Runbook
+When building open-source releases on GitHub Actions without active Apple Developer Program credentials:
+- **The Empty Secret Gotcha**: In GitHub Actions, if `secrets.CSC_LINK` is not configured, `${{ secrets.CSC_LINK }}` evaluates to an empty string (`""`). Passing `CSC_LINK: ""` causes `app-builder-lib` to treat `""` as non-null, resolve `path.resolve(currentDir, "")` to the workspace root directory, and crash with `InvalidConfigurationError: <repo-root> not a file`.
+- **The Default Identity Search Gotcha**: When `CSC_LINK` is unset, `@electron/osx-sign` defaults to searching the runner keychain for `Developer ID Application:`. On GitHub virtual runners, no developer certificate exists, causing `osx-sign` to throw `No identity found for signing`.
+- **The Solution**: In `.github/workflows/release.yml`, we sanitize the environment before invoking electron-builder:
+  ```bash
+  EXTRA_BUILDER_ARGS="-c.npmRebuild=false"
+  if [ -z "${CSC_LINK:-}" ]; then
+    echo "No CSC_LINK certificate secret configured. Setting mac.identity=null to skip code signing."
+    unset CSC_LINK
+    unset CSC_KEY_PASSWORD
+    unset APPLE_ID
+    unset APPLE_APP_SPECIFIC_PASSWORD
+    unset APPLE_TEAM_ID
+    EXTRA_BUILDER_ARGS="-c.mac.identity=null -c.npmRebuild=false"
+  fi
+  npx electron-builder --mac --arm64 --publish never $EXTRA_BUILDER_ARGS
+  ```
+  Passing `-c.mac.identity=null` instructs electron-builder to skip code signing cleanly, allowing ad-hoc open-source DMG and ZIP packaging.
+
+### 4.7 Cross-Architecture Intel (x64) Packaging on Apple Silicon Runners
+- **Runner Reality**: GitHub Actions `macos-latest` runs on Apple Silicon (`arm64`). Legacy `macos-13` Intel runners are retired.
+- **Dependency Omission**: Running standard `npm ci` on an `arm64` host deliberately skips optional dependencies targeting other CPU architectures (such as `@koromix/koffi-darwin-x64`).
+- **The Rebuild Trap**: When cross-packaging for `--x64`, `electron-builder` attempts to run `@electron/rebuild --arch x64`, which fails trying to compile native modules across CPU architectures.
+- **The Solution**:
+  1. Force install the prebuilt target architecture package:
+     ```bash
+     npm install --no-save --force @koromix/koffi-darwin-x64@3.3.4
+     ```
+  2. Pass `-c.npmRebuild=false` to electron-builder to reuse the official precompiled native `.node` binary and skip redundant recompilation.
+
+### 4.8 Linux AppImage Headless Smoke Testing & FUSE Bypass
+- **The FUSE Barrier**: AppImages require the kernel FUSE filesystem (`libfuse2`) to mount. Ubuntu 24.04 runner environments lack FUSE 2 by default, causing AppImages to fail on launch.
+- **The Helper Trap**: Running `find release/linux-unpacked -maxdepth 1 -type f -executable | head -n 1` picks `chrome-sandbox` (an internal SUID helper), which immediately crashes with `SIGSEGV` (exit code 139) when run without setuid root.
+- **The Solution**:
+  1. The unpacked test must explicitly execute `"release/linux-unpacked/Sibcut Video Editor"`.
+  2. The AppImage test must extract the squashfs payload cleanly using `--appimage-extract` into a temporary directory and execute the resulting `./squashfs-root/"Sibcut Video Editor" --smoke-test --no-sandbox` under `xvfb-run`. This verifies the packaged binary payload with 100% determinism and zero kernel FUSE dependencies.
+
+### 4.9 Packaged Binary Dynamic Library Resolution (ASAR Unpack Priority)
+- **The ASAR Limitation**: Operating system dynamic linkers (`LoadLibrary` on Windows, `dlopen` on macOS and Linux) **cannot read or execute shared libraries (`.dll`, `.dylib`, `.so`) directly from inside virtual ASAR archives**.
+- **Candidate Path Priority**: In `vosk-service.cjs`, candidate directory search must prioritize `app.asar.unpacked` over `app.asar`, and must reject any candidate directory containing `app.asar` unless it contains `app.asar.unpacked`:
+  ```javascript
+  const isAsar = __dirname.includes('app.asar');
+  const unpackedBase = isAsar
+    ? __dirname.replace(/app\.asar.*$/, 'app.asar.unpacked')
+    : path.join(__dirname, '..', 'app.asar.unpacked');
+
+  const candidateDirs = [
+    path.join(unpackedBase, cfg.platformDir),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', cfg.platformDir),
+    path.join(execDir, 'resources', 'app.asar.unpacked', cfg.platformDir),
+    ...(!isAsar ? [path.join(__dirname, cfg.platformDir)] : []),
+    path.join(process.resourcesPath || '', cfg.platformDir),
+    path.join(execDir, cfg.platformDir),
+  ];
+  ```
+
 ---
 
 ## 5. Daily Git Synchronization & Branching
@@ -306,3 +363,43 @@ If you need to re-run the release after fixing a workflow or code bug:
    ```bash
    git ls-remote origin
    ```
+
+### Scenario D: macOS build fails with `<workspace-dir> not a file` or `No identity found for signing`
+- **Root Cause**: `CSC_LINK` was provided as an empty string in the GitHub Actions workflow environment. `app-builder-lib` resolves `""` to the workspace directory and crashes because a directory is not a `.p12` file. Alternatively, `@electron/osx-sign` tried to find a `Developer ID Application:` certificate in the runner's empty keychain.
+- **Fix**: Sanitize the environment before packaging:
+  ```bash
+  EXTRA_BUILDER_ARGS="-c.npmRebuild=false"
+  if [ -z "${CSC_LINK:-}" ]; then
+    unset CSC_LINK
+    unset CSC_KEY_PASSWORD
+    unset APPLE_ID
+    unset APPLE_APP_SPECIFIC_PASSWORD
+    unset APPLE_TEAM_ID
+    EXTRA_BUILDER_ARGS="-c.mac.identity=null -c.npmRebuild=false"
+  fi
+  npx electron-builder --mac --arm64 --publish never $EXTRA_BUILDER_ARGS
+  ```
+
+### Scenario E: macOS Intel (x64) build fails on Apple Silicon runner
+- **Root Cause**: Running `npm ci` on `macos-latest` (arm64) automatically omits optional dependencies for other CPU architectures (`@koromix/koffi-darwin-x64`). `@electron/rebuild` fails trying to cross-compile for x64 on arm64.
+- **Fix**: Force install the prebuilt x64 addon package and disable rebuild:
+  ```bash
+  npm install --no-save --force @koromix/koffi-darwin-x64@3.3.4
+  npx electron-builder --mac --x64 --publish never -c.npmRebuild=false -c.mac.identity=null
+  ```
+
+### Scenario F: Linux smoke test crashes with SIGSEGV (exit code 139)
+- **Root Cause**: The test script selected `chrome-sandbox` (the internal Chromium SUID helper) instead of `"Sibcut Video Editor"`. Alternatively, the AppImage failed to mount because the runner lacks kernel FUSE permissions.
+- **Fix**: Explicitly execute the actual app binary and extract the AppImage with `--appimage-extract`:
+  ```bash
+  # 1. Test unpacked binary directly
+  xvfb-run --auto-servernum "release/linux-unpacked/Sibcut Video Editor" --smoke-test --no-sandbox
+
+  # 2. Test extracted AppImage bundle without FUSE kernel dependency
+  "$APPIMAGE" --appimage-extract
+  xvfb-run --auto-servernum ./squashfs-root/"Sibcut Video Editor" --smoke-test --no-sandbox
+  ```
+
+### Scenario G: Packaged Electron binary fails loading native `.dll`, `.dylib`, or `.so` libraries
+- **Root Cause**: Native libraries cannot be loaded directly from inside virtual ASAR archives by OS dynamic linkers (`LoadLibrary` / `dlopen`).
+- **Fix**: Ensure `vosk-service.cjs` prioritizes `app.asar.unpacked` over `app.asar`, and verify `package.json` includes `**/native/**` in `asarUnpack`.
