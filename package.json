@@ -28,8 +28,8 @@
     "build:wasm": "node tools/build-wasm.mjs",
     "check:licenses": "node tools/check-licenses.mjs",
     "check:packaging": "node tools/check-packaging.mjs",
-    "prebuild": "npm run check:licenses && npm run check:packaging",
-    "build:electron": "npm run check:packaging && npm run build:worker && vite build --config vite.electron.config.js",
+    "prebuild": "node tools/fetch-native-vosk.mjs && npm run check:licenses && npm run check:packaging",
+    "build:electron": "node tools/fetch-native-vosk.mjs && npm run check:packaging && npm run build:worker && vite build --config vite.electron.config.js",
     "electron:dev": "npm run build:electron && electron .",
     "electron:pack": "npm run build:electron && electron-builder --win",
     "electron:pack:portable": "npm run build:electron && electron-builder --win portable",
@@ -39,7 +39,8 @@
     "electron:pack:mac": "npm run build:electron && electron-builder --mac",
     "electron:pack:mac:arm64": "npm run build:electron && electron-builder --mac --arm64",
     "electron:pack:mac:x64": "npm run build:electron && electron-builder --mac --x64",
-    "electron:pack:linux": "npm run build:electron && electron-builder --linux"
+    "electron:pack:linux": "npm run build:electron && electron-builder --linux",
+    "fetch:vosk": "node tools/fetch-native-vosk.mjs"
   },
   "dependencies": {
     "koffi": "^3.3.4",
@@ -102,7 +103,6 @@
       "vosk-worker.cjs",
       "electron-vosk-ipc.cjs",
       "electron-projects-ipc.cjs",
-      "native/**",
       "assets/branding/app-icons/**",
       "assets/branding/master/app-icon-master.png",
       "assets/branding/tray/**",
@@ -125,6 +125,9 @@
             "x64"
           ]
         }
+      ],
+      "files": [
+        "native/win-x86_64/**"
       ]
     },
     "nsis": {
@@ -168,7 +171,10 @@
           ]
         }
       ],
-      "artifactName": "Sibcut-Video-Editor-macOS-${arch}.${ext}"
+      "artifactName": "Sibcut-Video-Editor-macOS-${arch}.${ext}",
+      "files": [
+        "native/darwin/**"
+      ]
     },
     "dmg": {
       "title": "Sibcut Video Editor",
@@ -204,7 +210,10 @@
       ],
       "maintainer": "Sina Sinaei <sina9100t@gmail.com>",
       "synopsis": "Professional multi-track video editor",
-      "description": "Sibcut Video Editor: a professional multi-track video editor with timeline editing, text, effects, transitions, filters, keyframes, captions and export, running locally on your device."
+      "description": "Sibcut Video Editor: a professional multi-track video editor with timeline editing, text, effects, transitions, filters, keyframes, captions and export, running locally on your device.",
+      "files": [
+        "native/linux-x64/**"
+      ]
     },
     "appImage": {
       "artifactName": "Sibcut-Video-Editor-Linux-${arch}.AppImage"

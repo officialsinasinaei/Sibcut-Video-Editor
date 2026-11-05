@@ -439,6 +439,24 @@ async function createWindow() {
     mainWindow.show();
     if (isSmokeTest) {
       console.log('[SMOKE-TEST] Window rendered and displayed successfully.');
+      // Verify native Vosk engine initialization
+      try {
+        if (voskService.isNativeSupported(process.platform)) {
+          const voskOk = voskService.initNativeLibrary();
+          if (!voskOk) {
+            console.error(`[SMOKE-TEST-ERROR] Native speech recognition engine failed to initialize for platform: ${process.platform}`);
+            app.exit(1);
+            return;
+          }
+          console.log(`[SMOKE-TEST] Native speech recognition engine verified for platform: ${process.platform}`);
+        } else {
+          console.log(`[SMOKE-TEST] Native speech recognition engine standby (no binary hydrated) for platform: ${process.platform}`);
+        }
+      } catch (nativeErr) {
+        console.error('[SMOKE-TEST-ERROR] Native speech recognition verification threw:', nativeErr);
+        app.exit(1);
+        return;
+      }
       setTimeout(() => {
         console.log('[SMOKE-TEST] App launched successfully, exiting with code 0');
         app.exit(0);

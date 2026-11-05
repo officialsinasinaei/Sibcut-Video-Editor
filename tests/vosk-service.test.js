@@ -12,19 +12,29 @@ describe('Vosk Speech Recognition Service & Worker', () => {
     expect(ok).toBe(true);
   });
 
-  it('handles non-Windows platforms gracefully without throwing', () => {
+  it('handles cross-platform native library discovery for win32, darwin, and linux', () => {
     expect(typeof voskService.isPlatformSupported).toBe('function');
     expect(typeof voskService.isNativeSupported).toBe('function');
-    expect(voskService.isPlatformSupported('win32')).toBe(true);
-    expect(voskService.isNativeSupported('win32')).toBe(true);
-    expect(voskService.isPlatformSupported('darwin')).toBe(false);
-    expect(voskService.isNativeSupported('darwin')).toBe(false);
-    expect(voskService.isPlatformSupported('linux')).toBe(false);
-    expect(voskService.isNativeSupported('linux')).toBe(false);
+    expect(typeof voskService.getNativeLibraryDir).toBe('function');
 
-    // Explicitly testing non-win32 target platform behavior
-    expect(voskService.initNativeLibrary('darwin')).toBe(false);
-    expect(voskService.initNativeLibrary('linux')).toBe(false);
+    expect(voskService.isPlatformSupported('win32')).toBe(true);
+    expect(voskService.isPlatformSupported('darwin')).toBe(true);
+    expect(voskService.isPlatformSupported('linux')).toBe(true);
+    expect(voskService.isPlatformSupported('sunos')).toBe(false);
+
+    // Native binaries: win32 is checked into repo, darwin and linux are hydrated via tools/fetch-native-vosk.mjs
+    expect(voskService.isNativeSupported('win32')).toBe(true);
+    expect(voskService.isNativeSupported('sunos')).toBe(false);
+    expect(voskService.isNativeSupported('darwin')).toBe(Boolean(voskService.getNativeLibraryDir('darwin')));
+    expect(voskService.isNativeSupported('linux')).toBe(Boolean(voskService.getNativeLibraryDir('linux')));
+
+    expect(voskService.getNativeLibraryDir('win32')).toContain('win-x86_64');
+    if (voskService.getNativeLibraryDir('darwin')) {
+      expect(voskService.getNativeLibraryDir('darwin')).toContain('darwin');
+    }
+    if (voskService.getNativeLibraryDir('linux')) {
+      expect(voskService.getNativeLibraryDir('linux')).toContain('linux-x64');
+    }
   });
 
   it('scans models directory correctly', () => {

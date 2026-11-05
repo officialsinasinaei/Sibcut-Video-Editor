@@ -55,3 +55,11 @@ _Avoid_: Universal binary hack, fat installer, all-mac package
 **Native Capability Guard**:
 A runtime check that verifies the availability and platform compatibility of native dynamic libraries (such as C/FFI shared objects or DLLs) before invoking native bindings, cleanly disabling dependent UI features when the platform is unsupported rather than terminating the process with an unhandled exception.
 _Avoid_: DLL try-catch, native crash fix, OS check hack
+
+**Build-Time Native Hydration**:
+The practice of downloading, verifying (via cryptographic SHA-256 hashes), and caching platform-specific native binaries (e.g. `libvosk.dylib`, `libvosk.so`) during the build and packaging step rather than committing multi-megabyte binary blobs directly into Git version control history.
+_Avoid_: Binary downloading hack, curl-in-build, on-the-fly fetch
+
+**Dynamic Library Validation**:
+A macOS Hardened Runtime security enforcement mechanism that restricts dynamic library (`.dylib`) loading to libraries signed with the same developer team ID unless explicitly relaxed via `com.apple.security.cs.disable-library-validation` for third-party C/FFI modules.
+_Avoid_: Mac dylib bypass, signing skip, amfi hack

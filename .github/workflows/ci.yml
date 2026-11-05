@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
+
       - name: Verify open-source licenses
         run: npm run check:licenses
 
@@ -61,6 +64,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
 
       - name: Compile worker and frontend
         run: npm run build:electron

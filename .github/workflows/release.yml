@@ -60,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
+
       - name: Verify licenses and packaging guardrails
         shell: pwsh
         run: |
@@ -120,6 +123,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
+
       - name: Verify licenses and packaging
         run: |
           npm run check:licenses
@@ -177,6 +183,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
 
       - name: Verify licenses and packaging
         run: |
@@ -240,6 +249,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Hydrate native speech engine binaries
+        run: node tools/fetch-native-vosk.mjs
 
       - name: Verify licenses and packaging
         run: |

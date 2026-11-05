@@ -61,16 +61,45 @@ let cachedModelPtr = null;
 const activeDownloads = new Map();
 
 /**
- * Find the directory containing libvosk.dll and its dependent DLLs.
- * Ensures DLLs are also mirrored to persistent userData/vosk-native for portable stability.
+ * Native library platform configurations
  */
-function getNativeDllDir() {
-  const dlls = ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libvosk.dll'];
+const PLATFORM_CONFIGS = {
+  win32: {
+    platformDir: path.join('native', 'win-x86_64'),
+    primaryFile: 'libvosk.dll',
+    requiredFiles: ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libvosk.dll'],
+  },
+  darwin: {
+    platformDir: path.join('native', 'darwin'),
+    primaryFile: 'libvosk.dylib',
+    requiredFiles: ['libvosk.dylib'],
+  },
+  linux: {
+    platformDir: path.join('native', 'linux-x64'),
+    primaryFile: 'libvosk.so',
+    requiredFiles: ['libvosk.so'],
+  },
+};
+
+/**
+ * Return native binary configuration per platform
+ */
+function getPlatformNativeConfig(platform = process.platform) {
+  return PLATFORM_CONFIGS[platform] || null;
+}
+
+/**
+ * Find the directory containing libvosk for the target platform.
+ * Ensures binaries are mirrored to persistent userData/vosk-native for portable stability.
+ */
+function getNativeLibraryDir(platform = process.platform) {
+  const cfg = getPlatformNativeConfig(platform);
+  if (!cfg) return null;
 
   // 1. Check persistent userData/vosk-native directory first
   if (modelsDir) {
-    const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native');
-    const allUserExist = dlls.every((d) => fs.existsSync(path.join(userNativeDir, d)));
+    const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native', platform);
+    const allUserExist = cfg.requiredFiles.every((d) => fs.existsSync(path.join(userNativeDir, d)));
     if (allUserExist) {
       return userNativeDir;
     }
@@ -79,18 +108,18 @@ function getNativeDllDir() {
   // 2. Search candidate package/app directories
   const execDir = process.execPath ? path.dirname(process.execPath) : '';
   const candidateDirs = [
-    path.join(__dirname, 'native', 'win-x86_64'),
-    path.join(__dirname.replace(/app\.asar[\\/]?$/, 'app.asar.unpacked'), 'native', 'win-x86_64'),
-    path.join(__dirname, '..', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(process.resourcesPath || '', 'native', 'win-x86_64'),
-    path.join(execDir, 'resources', 'app.asar.unpacked', 'native', 'win-x86_64'),
-    path.join(execDir, 'native', 'win-x86_64'),
+    path.join(__dirname, cfg.platformDir),
+    path.join(__dirname.replace(/app\.asar[\\/]?$/, 'app.asar.unpacked'), cfg.platformDir),
+    path.join(__dirname, '..', 'app.asar.unpacked', cfg.platformDir),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', cfg.platformDir),
+    path.join(process.resourcesPath || '', cfg.platformDir),
+    path.join(execDir, 'resources', 'app.asar.unpacked', cfg.platformDir),
+    path.join(execDir, cfg.platformDir),
   ];
 
   let foundDir = null;
   for (const dir of candidateDirs) {
-    if (fs.existsSync(path.join(dir, 'libvosk.dll'))) {
+    if (fs.existsSync(path.join(dir, cfg.primaryFile))) {
       foundDir = dir;
       break;
     }
@@ -99,47 +128,63 @@ function getNativeDllDir() {
   // 3. If found in a packaged/temporary directory, mirror to persistent userData/vosk-native
   if (foundDir && modelsDir) {
     try {
-      const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native');
+      const userNativeDir = path.join(path.dirname(modelsDir), 'vosk-native', platform);
       fs.mkdirSync(userNativeDir, { recursive: true });
-      for (const dll of dlls) {
-        const src = path.join(foundDir, dll);
-        const dst = path.join(userNativeDir, dll);
+      for (const f of cfg.requiredFiles) {
+        const src = path.join(foundDir, f);
+        const dst = path.join(userNativeDir, f);
         if (fs.existsSync(src)) {
           if (!fs.existsSync(dst) || fs.statSync(src).size !== fs.statSync(dst).size) {
             fs.copyFileSync(src, dst);
           }
         }
       }
-      if (dlls.every((d) => fs.existsSync(path.join(userNativeDir, d)))) {
+      if (cfg.requiredFiles.every((d) => fs.existsSync(path.join(userNativeDir, d)))) {
         return userNativeDir;
       }
     } catch (copyErr) {
-      console.warn('[Vosk] Mirroring DLLs to userData failed:', copyErr.message);
+      console.warn('[Vosk] Mirroring native binaries to userData failed:', copyErr.message);
     }
   }
 
   return foundDir;
 }
 
+// Backward-compatibility alias
+function getNativeDllDir() {
+  return getNativeLibraryDir('win32');
+}
+
 /**
- * Check if the host operating system currently has bundled native Vosk libraries.
- * Currently win32 (x86_64) is bundled; macOS (.dylib) and Linux (.so) are in development.
+ * Check if the host operating system is supported by the Vosk engine.
  */
 function isPlatformSupported(platform = process.platform) {
-  return platform === 'win32';
-}
-
-function isNativeSupported(platform = process.platform) {
-  return isPlatformSupported(platform);
+  return ['win32', 'darwin', 'linux'].includes(platform);
 }
 
 /**
- * Locate and load libvosk.dll with Koffi
+ * Check if the native library is available and hydrated on disk.
+ */
+function isNativeSupported(platform = process.platform) {
+  if (!isPlatformSupported(platform)) return false;
+  return Boolean(getNativeLibraryDir(platform));
+}
+
+/**
+ * Locate and load native Vosk library with Koffi
  */
 function initNativeLibrary(targetPlatform = process.platform) {
   if (!isPlatformSupported(targetPlatform)) {
-    const msg = `Native speech recognition is currently not bundled for ${targetPlatform}.`;
+    const msg = `Native speech recognition is not supported on ${targetPlatform}.`;
     console.info('[Vosk]', msg);
+    lastNativeLoadError = new Error(msg);
+    return false;
+  }
+
+  const libDir = getNativeLibraryDir(targetPlatform);
+  if (!libDir) {
+    const msg = `Vosk native binary not found for ${targetPlatform} in candidate paths.`;
+    console.warn('[Vosk]', msg);
     lastNativeLoadError = new Error(msg);
     return false;
   }
@@ -157,42 +202,39 @@ function initNativeLibrary(targetPlatform = process.platform) {
     }
   }
 
-  const dllDir = getNativeDllDir();
-  if (!dllDir) {
-    const msg = 'libvosk.dll not found in candidate paths.';
-    console.error('[Vosk]', msg);
-    lastNativeLoadError = new Error(msg);
-    return false;
-  }
+  const cfg = getPlatformNativeConfig(targetPlatform);
+  const primaryPath = path.join(libDir, cfg.primaryFile);
 
-  // 1. Tell Windows OS to look in dllDir for dependent DLLs
-  try {
-    const k32 = koffi.load('kernel32.dll');
-    const SetDllDirectoryA = k32.func('int __stdcall SetDllDirectoryA(const char *lpPathName)');
-    SetDllDirectoryA(dllDir);
-  } catch (e) {
-    console.warn('[Vosk] SetDllDirectoryA call warning:', e.message);
-  }
+  // Platform-specific helper library pre-loading
+  if (targetPlatform === 'win32') {
+    // 1. Tell Windows OS to look in libDir for dependent DLLs
+    try {
+      const k32 = koffi.load('kernel32.dll');
+      const SetDllDirectoryA = k32.func('int __stdcall SetDllDirectoryA(const char *lpPathName)');
+      SetDllDirectoryA(libDir);
+    } catch (e) {
+      console.warn('[Vosk] SetDllDirectoryA call warning:', e.message);
+    }
 
-  // 2. Pre-load dependent MinGW / GCC / pthread DLLs in dependency order
-  const depFiles = ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll'];
-  for (const dep of depFiles) {
-    const depPath = path.join(dllDir, dep);
-    if (fs.existsSync(depPath)) {
-      try {
-        koffi.load(depPath);
-      } catch (depErr) {
-        console.warn(`[Vosk] Warning loading ${dep}:`, depErr.message);
+    // 2. Pre-load dependent MinGW / GCC / pthread DLLs in dependency order
+    const depFiles = ['libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll'];
+    for (const dep of depFiles) {
+      const depPath = path.join(libDir, dep);
+      if (fs.existsSync(depPath)) {
+        try {
+          koffi.load(depPath);
+        } catch (depErr) {
+          console.warn(`[Vosk] Warning loading ${dep}:`, depErr.message);
+        }
       }
     }
+
+    // 3. Update PATH as fallback
+    process.env.PATH = libDir + ';' + process.env.PATH;
   }
 
-  // 3. Update PATH as fallback
-  process.env.PATH = dllDir + ';' + process.env.PATH;
-
   try {
-    const dllPath = path.join(dllDir, 'libvosk.dll');
-    libvosk = koffi.load(dllPath);
+    libvosk = koffi.load(primaryPath);
 
     VoskModel = koffi.opaque('VoskModel');
     VoskRecognizer = koffi.opaque('VoskRecognizer');
@@ -208,10 +250,10 @@ function initNativeLibrary(targetPlatform = process.platform) {
     vosk_recognizer_free = libvosk.func('void vosk_recognizer_free(VoskRecognizer *recognizer)');
 
     vosk_set_log_level(-1); // Warnings and errors only
-    console.log('[Vosk] Native Vosk library initialized successfully from:', dllDir);
+    console.log(`[Vosk] Native Vosk library initialized successfully from: ${libDir}`);
     return true;
   } catch (err) {
-    console.error('[Vosk] Failed to load libvosk.dll:', err);
+    console.error(`[Vosk] Failed to load ${cfg.primaryFile}:`, err);
     lastNativeLoadError = err;
     libvosk = null;
     return false;
@@ -239,7 +281,23 @@ function init(electronApp) {
 // ─── Zip Extraction ──────────────────────────────────────────────────────────
 
 /**
- * Safe unzipping with yauzl or native system tool (tar / powershell) to target directory
+ * Execute system extraction fallback (PowerShell on Windows, unzip on macOS/Linux)
+ */
+function runSystemFallback(zipPath, targetDir, resolve, reject) {
+  const { spawn } = require('child_process');
+  if (process.platform === 'win32') {
+    const ps = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force`], { windowsHide: true });
+    ps.on('close', (pCode) => (pCode === 0 ? resolve(true) : reject(new Error('Zip extraction failed with exit code ' + pCode))));
+    ps.on('error', reject);
+  } else {
+    const uz = spawn('unzip', ['-o', '-q', zipPath, '-d', targetDir]);
+    uz.on('close', (uCode) => (uCode === 0 ? resolve(true) : reject(new Error('Zip extraction failed with exit code ' + uCode))));
+    uz.on('error', reject);
+  }
+}
+
+/**
+ * Safe unzipping with yauzl or native system tool (tar / powershell / unzip) to target directory
  */
 function extractZip(zipPath, targetDir) {
   return new Promise((resolve, reject) => {
@@ -248,21 +306,10 @@ function extractZip(zipPath, targetDir) {
       const tar = spawn('tar', ['-xf', zipPath, '-C', targetDir], { windowsHide: true });
       tar.on('close', (code) => {
         if (code === 0) return resolve(true);
-        // Fallback to PowerShell Expand-Archive
-        const ps = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force`], { windowsHide: true });
-        ps.on('close', (pCode) => {
-          if (pCode === 0) resolve(true);
-          else reject(new Error('Zip extraction failed with exit code ' + pCode));
-        });
-        ps.on('error', reject);
+        runSystemFallback(zipPath, targetDir, resolve, reject);
       });
       tar.on('error', () => {
-        const ps = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force`], { windowsHide: true });
-        ps.on('close', (pCode) => {
-          if (pCode === 0) resolve(true);
-          else reject(new Error('Zip extraction failed with exit code ' + pCode));
-        });
-        ps.on('error', reject);
+        runSystemFallback(zipPath, targetDir, resolve, reject);
       });
     }
 
@@ -774,7 +821,8 @@ function getOrCreateWorker() {
       workerData: {
         userDataPath: userPath,
         modelsDir: modelsDir,
-        dllDir: getNativeDllDir(),
+        nativeDir: getNativeLibraryDir(process.platform),
+        dllDir: getNativeLibraryDir(process.platform),
       },
     });
 
@@ -1041,6 +1089,9 @@ async function transcribeAudio(modelPathOrOptions, audioData, sampleRate = 16000
 module.exports = {
   init,
   initNativeLibrary,
+  getNativeLibraryDir,
+  getNativeDllDir,
+  getPlatformNativeConfig,
   isPlatformSupported,
   isNativeSupported,
   listInstalledModels,

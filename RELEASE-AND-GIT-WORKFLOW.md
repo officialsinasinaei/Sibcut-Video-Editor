@@ -107,7 +107,9 @@ npm run build:electron
 Sibcut Video Editor is a self-contained desktop application. It intentionally bundles:
 - Pre-compiled ONNX WebAssembly SIMD runtimes (`public/assets/ort-wasm-simd-threaded.*.wasm`) (~29 MB each)
 - Offline background matting neural network (`public/models/rvm_mobilenetv3.onnx`) (~15 MB)
-- Native offline Vosk speech recognition DLLs (`native/win-x86_64/libvosk.dll`) (~26 MB)
+- Native offline Vosk speech recognition DLLs for Windows (`native/win-x86_64/libvosk.dll`) (~26 MB)
+
+To prevent repository bloat, macOS (`libvosk.dylib`) and Linux (`libvosk.so`) native libraries are **not stored in Git**. Instead, they are hydrated at build time via `npm run fetch:vosk` (`tools/fetch-native-vosk.mjs`) with cache-first SHA-256 verification.
 
 Because the repository history contains ~60–100 MB of compressed binaries, standard Git pushes over HTTPS can fail on slow or filtered connections with:
 - `error: RPC failed; curl 55 Send failure: Connection was aborted`
