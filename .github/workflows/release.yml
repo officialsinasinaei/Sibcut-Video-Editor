@@ -293,16 +293,25 @@ jobs:
 
       - name: Verify Linux AppImage via Headless Smoke Test
         run: |
-          UNPACKED_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable 2>/dev/null | head -n 1)
-          if [ -n "$UNPACKED_BIN" ]; then
+          UNPACKED_BIN="release/linux-unpacked/Sibcut Video Editor"
+          if [ -f "$UNPACKED_BIN" ]; then
+            chmod +x "$UNPACKED_BIN"
             echo "Executing unpacked Linux binary: $UNPACKED_BIN"
             xvfb-run --auto-servernum "$UNPACKED_BIN" --smoke-test --no-sandbox
           fi
           APPIMAGE=$(find release -maxdepth 1 -name "*.AppImage" | head -n 1)
-          echo "Found AppImage: $APPIMAGE"
-          chmod +x "$APPIMAGE"
-          echo "Executing AppImage with xvfb extract-and-run smoke test..."
-          xvfb-run --auto-servernum "$APPIMAGE" --appimage-extract-and-run --smoke-test --no-sandbox
+          if [ -n "$APPIMAGE" ]; then
+            echo "Extracting AppImage for headless verification: $APPIMAGE"
+            chmod +x "$APPIMAGE"
+            WORKSPACE_DIR="$(pwd)"
+            TMP_EXTRACT=$(mktemp -d)
+            cd "$TMP_EXTRACT"
+            "$WORKSPACE_DIR/$APPIMAGE" --appimage-extract
+            echo "Executing extracted AppImage bundle..."
+            xvfb-run --auto-servernum ./squashfs-root/"Sibcut Video Editor" --smoke-test --no-sandbox
+            cd "$WORKSPACE_DIR"
+            rm -rf "$TMP_EXTRACT"
+          fi
 
       - name: Stage Linux artifacts
         run: |

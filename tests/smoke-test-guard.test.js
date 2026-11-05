@@ -50,8 +50,9 @@ describe('Electron Smoke-Test Argument & Lifecycle Configuration', () => {
     expect(content).toContain('unset CSC_KEY_PASSWORD');
     expect(content).toContain('MOUNT_LINE=$(hdiutil attach "$DMG_PATH" -nobrowse | grep "/Volumes")');
 
-    // Linux FUSE & AppImage extract-and-run guard
-    expect(content).toContain('--appimage-extract-and-run');
+    // Linux FUSE & AppImage extract guard
+    expect(content).toContain('UNPACKED_BIN="release/linux-unpacked/Sibcut Video Editor"');
+    expect(content).toContain('--appimage-extract');
     expect(content).toContain('libfuse2');
   });
 });
