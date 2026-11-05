@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.4] - 2026-11-05
+
+### Added
+- **Cross-Platform Native Vosk Speech Recognition Hydration**:
+  - Offline speech-to-text and caption generation now runs natively on macOS (Apple Silicon arm64 and Intel x64), Linux (x86_64), and Windows (x86_64).
+  - Added build-time native hydration script (tools/fetch-native-vosk.mjs) with SHA-256 integrity validation and local caching, preventing Git repository binary bloat while maintaining full release automation.
+  - Implemented per-platform packaging isolation in package.json to ensure each OS distribution only bundles its own native runtime (.dylib for macOS, .so for Linux, .dll for Windows).
+  - Cross-platform dynamic library discovery and Worker thread communication in vosk-service.cjs and vosk-worker.cjs.
+- **macOS Gatekeeper Compliance & Hardened Runtime**:
+  - Added Hardened Runtime entitlements (build/entitlements.mac.plist) with JIT and unsigned executable memory permissions to comply with macOS Gatekeeper.
+  - Configured separate Apple Silicon (arm64) and Intel (x64) release packaging targets.
+- **Automated Cross-Platform Smoke Testing & Release Gates**:
+  - Introduced deterministic headless --smoke-test in electron-main.cjs verifying window rendering, IPC servers, and native speech recognition engine initialization.
+  - Hardened GitHub Actions CI and Release pipelines to run smoke tests on real virtual runners before any release artifacts can be published.
+
+### Documented
+- Recorded Architecture Decision Records ADR-0004 (Cross-Platform Release Verification & macOS Quarantine) and ADR-0005 (Cross-Platform Native Speech Engine Hydration).
+- Updated repository runbook RELEASE-AND-GIT-WORKFLOW.md and domain glossary GLOSSARY.md.
+
 ## [1.0.3] - 2026-11-04
 
 ### Added

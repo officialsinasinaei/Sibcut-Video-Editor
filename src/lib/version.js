@@ -1,5 +1,5 @@
 export const APP_NAME = 'Sibcut Video Editor';
-export const APP_VERSION = '1.0.3';
+export const APP_VERSION = '1.0.4';
 export const APP_DESCRIPTION = 'A professional video editing application.';
 export const CREATOR_NAME = 'Sina Sinaei';
 export const CREATOR_EMAIL = 'sina9100t@gmail.com';

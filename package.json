@@ -1,6 +1,6 @@
 {
   "name": "video-studio",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Sibcut Video Editor: a professional multi-track video editor. Timeline editing, text, effects, transitions, filters, keyframes, captions and export, stored locally on your device.",
   "type": "module",
   "private": true,
