@@ -63,8 +63,8 @@ export async function openCutoutRefine(ctx, clipId = ctx.store.selected?.clip.id
   }
   const { canvas } = frame;
   const aspect = canvas.width / canvas.height;
-  // The model's matte for this frame.
-  const m = await segment(canvas);
+  // The model's matte for this frame (do not pollute video recurrent state).
+  const m = await segment(canvas, { recurrent: false });
   if (!m) {
     toast('Could not find people in this frame.', { kind: 'error' });
     return;

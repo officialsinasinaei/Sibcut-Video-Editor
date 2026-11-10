@@ -195,6 +195,7 @@ uniform int u_retouchOn;     // skin retouch (model/retouch.js)
 uniform vec4 u_retouch;      // smooth, even, brighten, sharpen (0..1)
 uniform vec2 u_matteTexel;
 uniform vec2 u_matteWin;
+uniform float u_fgDecontaminate;
 uniform int u_premultiplied;
 uniform vec2 u_srcSize;      // source size in pixels (face tools work in source pixels, y down)
 uniform int u_warpFaces;     // face shape (engine/face-render.js): faces with warp handles, 0 = off
@@ -232,22 +233,150 @@ vec4 tap(vec2 uv) {
 vec3 tapRgb(vec2 uv) { return tap(uv).rgb; }
 ${localLumaFn('tapRgb')}
 vec2 rgb2uv(vec3 c) { return vec2(-0.169 * c.r - 0.331 * c.g + 0.5 * c.b, 0.5 * c.r - 0.419 * c.g - 0.081 * c.b); }
+// Soft skin-tone membership from chroma (YCbCr), fading out in deep shadow.
+float skinW(vec3 c) {
+  float cb = 0.5 - 0.168736 * c.r - 0.331264 * c.g + 0.5 * c.b;
+  float cr = 0.5 + 0.5 * c.r - 0.418688 * c.g - 0.081312 * c.b;
+  float y = dot(c, vec3(0.299, 0.587, 0.114));
+  return smoothstep(0.26, 0.31, cb) * (1.0 - smoothstep(0.49, 0.54, cb))
+       * smoothstep(0.515, 0.55, cr) * (1.0 - smoothstep(0.67, 0.71, cr))
+       * smoothstep(0.08, 0.2, y);
+}
 // Masks are drawn on the picture, so they are sampled at the source uv (crop and flip included).
 float maskAlpha(vec2 uv) {
   if (u_maskOn == 0) return 1.0;
   return texture(u_maskTex, uv).a;
 }
-// RVM produces continuous sub-pixel alpha. We sample it directly,
-// adapting smoothly to the edge window (feather & shrink) while preserving
-// fine strand transparency and motion blur.
+// Guided Matte Refinement: refine the RVM matte against the full-resolution
+// source frame using an edge-preserving guided filter (joint bilateral upsampler)
+// that converts the 512x288 matte into a smooth, anti-aliased full-HD alpha ramp
+// while preserving sub-pixel hair strands and trimming outer background fringes.
 float matteRefined(vec2 uv, vec3 rgb) {
-  float a = texture(u_matteTex, uv).a;
-  return smoothstep(u_matteWin.x, u_matteWin.y, a);
+  vec4 m0 = texture(u_matteTex, uv);
+  float a0 = m0.a;
+  if (a0 <= 0.003) return 0.0;
+  if (a0 >= 0.997) return 1.0;
+
+  vec2 st = u_matteTexel;
+  float acc = a0 * 1.8;
+  float wsum = 1.8;
+  vec2 grad = vec2(0.0);
+
+  // 5x5 sub-sampled guided neighborhood across full-res and matte texels
+  for (int i = -2; i <= 2; i++) {
+    for (int j = -2; j <= 2; j++) {
+      if (i == 0 && j == 0) continue;
+      vec2 o = vec2(float(i), float(j));
+      float d2 = dot(o, o);
+      if (d2 > 5.5) continue;
+      float ma = texture(u_matteTex, uv + o * st * 0.55).a;
+      if (abs(i) <= 1 && abs(j) <= 1) grad += o * ma;
+      vec3 sc = tapRgb(uv + o * st * 0.45);
+      vec3 d = sc - rgb;
+      float w = exp(-d2 * 0.35 - dot(d, d) * 38.0);
+      acc += ma * w;
+      wsum += w;
+    }
+  }
+  float a = acc / wsum;
+
+  // Outer-halo & patterned-background trim:
+  // 1) Compare pixel color against inward foreground vs outward background
+  // 2) Suppress outer fringes (a < 0.72) whose chroma/color deviates from both
+  //    RVM's predicted foreground (m0.rgb) and inward foreground (fgIn), while protecting
+  //    genuine blonde hair highlights (which match m0.rgb and have low chroma deviation).
+  float gl = length(grad);
+  if (gl > 0.008 && a > 0.004 && a < 0.88 && u_fgDecontaminate > 0.0) {
+    vec2 dir = grad / gl;
+    vec3 fgIn = 0.5 * (tapRgb(uv + dir * st * 2.8) + tapRgb(uv + dir * st * 4.8));
+    vec3 bgOut = 0.5 * (tapRgb(uv - dir * st * 2.2) + tapRgb(uv - dir * st * 3.8));
+    float dFg = min(length(rgb - m0.rgb), length(rgb - fgIn));
+    float dBg = length(rgb - bgOut);
+    float sep = length(fgIn - bgOut);
+    if (sep > 0.035 && a < 0.72 && dBg < dFg * 0.96) {
+      float bgMatch = clamp((dFg - dBg * 0.88) / max(sep, 0.05), 0.0, 1.0);
+      float outerWeight = (1.0 - smoothstep(0.24, 0.70, a)) * clamp(u_fgDecontaminate, 0.0, 1.0);
+      a *= 1.0 - bgMatch * outerWeight * 0.92;
+    }
+    // Chroma outlier suppression: catches colorful/busy background blobs (magenta/cyan)
+    // that leak into low/mid alpha, without touching blonde hair (whose chroma matches fgIn/m0.rgb).
+    vec2 cUv = rgb2uv(rgb);
+    float chromaDist = min(distance(cUv, rgb2uv(fgIn)), distance(cUv, rgb2uv(m0.rgb)));
+    if (chromaDist > 0.038 && a < 0.82) {
+      float cSuppress = smoothstep(0.038, 0.11, chromaDist) * (1.0 - smoothstep(0.45, 0.82, a));
+      a *= 1.0 - cSuppress * clamp(u_fgDecontaminate, 0.0, 1.0) * 0.96;
+    }
+  }
+  // Global chroma sanity check for detached low/mid-alpha islands where local gradient gl is flat
+  if (a > 0.004 && a < 0.85 && u_fgDecontaminate > 0.0) {
+    float cDistM = distance(rgb2uv(rgb), rgb2uv(m0.rgb));
+    if (cDistM > 0.045) {
+      a *= 1.0 - smoothstep(0.045, 0.11, cDistM) * (1.0 - smoothstep(0.55, 0.85, a)) * clamp(u_fgDecontaminate, 0.0, 1.0) * 0.96;
+    }
+    // Also suppress high-saturation non-skin/non-hair color islands (magenta/cyan/neon) in semi-transparent regions
+    vec2 uvC = rgb2uv(rgb);
+    float sat = length(uvC);
+    if (sat > 0.14 && skinW(rgb) < 0.05 && a < 0.88) {
+      a *= 1.0 - smoothstep(0.14, 0.24, sat) * (1.0 - smoothstep(0.60, 0.88, a)) * clamp(u_fgDecontaminate, 0.0, 1.0) * 0.95;
+    }
+  }
+
+  // Continuous sub-pixel alpha mapping: preserve RVM's soft edge ramp
+  // while keeping low-confidence outer background haze (< 0.25) cleanly suppressed.
+  float mid = 0.5 * (u_matteWin.x + u_matteWin.y) + 0.035;
+  float halfSpan = max(0.14, 0.5 * (u_matteWin.y - u_matteWin.x) * 1.4);
+  float lo = clamp(mid - halfSpan, 0.02, 0.92);
+  float hi = clamp(mid + halfSpan, lo + 0.06, 0.99);
+  return smoothstep(lo, hi, a);
 }
 float matteAlpha(vec2 uv, vec3 rgb) {
   if (u_cutOn == 0 || u_matteOn == 0) return 1.0;
   if (u_matteOn == 2) return 0.0;
   return matteRefined(uv, rgb);
+}
+// Foreground Decontamination: unmix background color spill from semi-transparent
+// cutout edges using RVM's unpremultiplied foreground RGB (stored in u_matteTex.rgb)
+// and inward/outward full-resolution samples along the local matte gradient.
+vec3 foregroundDecontaminate(vec2 uv, vec3 c, float cut) {
+  if (u_cutOn == 0 || u_matteOn != 1 || u_fgDecontaminate <= 0.0 || cut <= 0.002) return c;
+  vec4 m = texture(u_matteTex, uv);
+  if (m.a >= 0.995 && cut >= 0.995) return c;
+  vec2 st = u_matteTexel;
+  float ax = texture(u_matteTex, uv + vec2(st.x, 0.0)).a - texture(u_matteTex, uv - vec2(st.x, 0.0)).a;
+  float ay = texture(u_matteTex, uv + vec2(0.0, st.y)).a - texture(u_matteTex, uv - vec2(0.0, st.y)).a;
+  vec2 grad = vec2(ax, ay);
+  float gl = length(grad);
+  vec2 dir = gl > 1e-4 ? grad / gl : vec2(0.0);
+  // Sample deep inward (+dir, higher alpha) for clean full-res foreground and outward (-dir) for background.
+  vec3 fgIn1 = gl > 1e-4 ? tapRgb(uv + dir * st * 2.8) : m.rgb;
+  vec3 fgIn2 = gl > 1e-4 ? tapRgb(uv + dir * st * 5.2) : m.rgb;
+  vec3 fgIn = 0.5 * (fgIn1 + fgIn2);
+  vec3 bgOut = gl > 1e-4 ? tapRgb(uv - dir * st * 2.5) : c;
+  // Combine RVM's unpremultiplied neural foreground prediction with deep inward full-res detail.
+  vec3 fgRef = mix(m.rgb, fgIn, 0.65);
+  float safeA = max(min(cut, m.a), 0.34);
+  vec3 unmixed = clamp((c - (1.0 - safeA) * bgOut) / safeA, 0.0, 1.0);
+  vec3 clean = mix(unmixed, fgRef, clamp(1.0 - min(cut, m.a) * 0.65, 0.58, 0.97));
+  // Clamp edge luminance strictly to deep inward foreground so bright white walls never leave a bright rim.
+  // Also cap against a warm neutral ceiling when the source pixel itself is near-white wall spill (luma(c) > 0.72)
+  // while inward hair/skin is darker.
+  float inLuma = min(luma(fgRef), luma(fgIn));
+  float maxFgLuma = inLuma + 0.010;
+  if (luma(c) > 0.70 && inLuma > 0.62 && min(cut, m.a) < 0.78) {
+    maxFgLuma = min(maxFgLuma, 0.62);
+  }
+  float cleanLuma = luma(clean);
+  if (cleanLuma > maxFgLuma && cleanLuma > 1e-4) {
+    clean *= maxFgLuma / cleanLuma;
+  }
+  // Suppress background color bleed (e.g. patterned/colored backgrounds) toward fgIn chroma.
+  float chromaDiff = length((clean - luma(clean)) - (fgIn - luma(fgIn)));
+  if (chromaDiff > 0.018) {
+    clean = mix(clean, fgIn, smoothstep(0.018, 0.08, chromaDiff) * 0.97);
+  }
+  float edgeBand = 1.0 - smoothstep(0.90, 0.996, min(cut, m.a));
+  float edgeWeight = edgeBand * clamp(u_fgDecontaminate * 1.25, 0.0, 1.0);
+  return clamp(mix(c, clean, edgeWeight), 0.0, 1.0);
 }
 // Where the clip's color applies (masks in color mode, person or background).
 float colorRegion(vec2 uv, vec3 rgb, float mask) {
@@ -258,15 +387,6 @@ float colorRegion(vec2 uv, vec3 rgb, float mask) {
     r *= p < 0.0 ? 0.0 : u_colorTarget == 1 ? p : 1.0 - p;
   }
   return r;
-}
-// Soft skin-tone membership from chroma (YCbCr), fading out in deep shadow.
-float skinW(vec3 c) {
-  float cb = 0.5 - 0.168736 * c.r - 0.331264 * c.g + 0.5 * c.b;
-  float cr = 0.5 + 0.5 * c.r - 0.418688 * c.g - 0.081312 * c.b;
-  float y = dot(c, vec3(0.299, 0.587, 0.114));
-  return smoothstep(0.26, 0.31, cb) * (1.0 - smoothstep(0.49, 0.54, cb))
-       * smoothstep(0.515, 0.55, cr) * (1.0 - smoothstep(0.67, 0.71, cr))
-       * smoothstep(0.08, 0.2, y);
 }
 // Skin retouch in source space: an edge-preserving average of nearby skin
 // (smooth), a wide average of its color (even), a lift (brighten), and an
@@ -515,6 +635,7 @@ void main() {
   if (u_makeupOn == 1) c.rgb = makeup(uv, c.rgb);
   if (u_hairOn == 1) c.rgb = hairRecolor(uv, c.rgb);
   float cut = matteAlpha(uv, c.rgb);
+  c.rgb = foregroundDecontaminate(uv, c.rgb, cut);
   float mk = maskAlpha(v_uv);
   float region = colorRegion(uv, c.rgb, mk);
   vec3 before = c.rgb;

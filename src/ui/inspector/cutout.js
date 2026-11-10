@@ -1,14 +1,14 @@
 /**
  * Video > Cutout: automatic background removal. clip.cutout = { feather,
- * shrink, smooth } (model/cutout.js); the person matte is worked out on
- * this device, frame by frame, while the clip is drawn. Turning it off
+ * shrink, smooth, decontaminate } (model/cutout.js); the person matte is worked
+ * out on this device, frame by frame, while the clip is drawn. Turning it off
  * removes the object; the panel remembers the last settings this session.
  */
 import { h, announce } from '../../lib/dom.js';
 import { icon } from '../../lib/icons.js';
 import { openCutoutRefine } from '../cutout-refine.js';
 import { slider, toggle, propSection } from './common.js';
-import { CUTOUT_DEFAULT } from '../../model/cutout.js';
+import { CUTOUT_DEFAULT, CUTOUT_DEFAULT_DECONTAMINATE } from '../../model/cutout.js';
 import { canvasSection } from './video-extras.js';
 import { ready, segmenterState, segmenterError, onSegmenterChange } from '../../media/segmenter.js';
 import { modelStatusLine } from './model-status.js';
@@ -61,6 +61,13 @@ export function cutoutTab(view) {
     get: (c) => Math.round(cur(c).smooth),
     set: (v, final) => setCutout('Cutout steadiness', 'smooth', (k) => (k.smooth = v), final),
   });
+  const decontaminate = slider(view, {
+    label: 'Foreground decontamination',
+    min: 0,
+    max: 100,
+    get: (c) => Math.round(cur(c).decontaminate ?? cur(c).dehalo ?? CUTOUT_DEFAULT_DECONTAMINATE),
+    set: (v, final) => setCutout('Cutout foreground decontamination', 'decontaminate', (k) => (k.decontaminate = v), final),
+  });
   const refine = h('button.btn.small', { type: 'button' }, icon('brush', 14), 'Refine with brush...');
   refine.addEventListener('click', () => openCutoutRefine(view.ctx, view.id));
   const fixes = h('span.asset-hint.cutout-fixes');
@@ -71,8 +78,8 @@ export function cutoutTab(view) {
   });
   const refineRow = h('div.cutout-refine', refine, fixes, clearFixes);
   const status = modelStatusLine();
-  const tip = h('p.asset-hint', 'Works best with people in clear view. Raise Edge position to trim halos; lower it to keep loose hair. Turn on Canvas below to put a color, a gradient or a blurred copy of the shot behind them.');
-  const params = h('div.chroma-params', feather.el, shrink.el, smooth.el, refineRow, tip);
+  const tip = h('p.asset-hint', 'Works best with people in clear view. Raise Foreground decontamination to remove background color halos, or adjust Edge position to trim or keep loose hair. Turn on Canvas below to put a color, a gradient or a blurred copy of the shot behind them.');
+  const params = h('div.chroma-params', feather.el, shrink.el, smooth.el, decontaminate.el, refineRow, tip);
 
   const render = () => {
     const c = view.clip;

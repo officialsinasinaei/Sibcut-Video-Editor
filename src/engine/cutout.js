@@ -7,7 +7,15 @@
  * face and hair tools have their own models (engine/face-render.js).
  */
 import { SEG_SIZE, segment, ready, segmenterState, onSegmenterChange } from '../media/segmenter.js';
-import { matteWindow, steadyMatte, strokeOverride, applyOverride, CUTOUT_DEFAULT } from '../model/cutout.js';
+import { computeMatteDims } from '../media/segmenter-core.js';
+import {
+  matteWindow,
+  foregroundDecontaminationAmount,
+  steadyMatte,
+  strokeOverride,
+  applyOverride,
+  CUTOUT_DEFAULT,
+} from '../model/cutout.js';
 import { retouchAmounts } from '../model/retouch.js';
 import { clipUsesBodyEffect } from '../model/body-effects.js';
 import { frameOf, drawUpright, faceModelsIn, ensureFaceModels, onFaceModelsReady, bindFaceLayer } from './face-render.js';
@@ -16,11 +24,16 @@ import { bindBodyLayer } from './body-render.js';
 /** Texture unit of the matte (masks use 6). */
 export const MATTE_UNIT = 7;
 
-const makeCanvas = (w, h) => (typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }));
+const makeCanvas = (w, h) =>
+  typeof OffscreenCanvas === 'function'
+    ? new OffscreenCanvas(w, h)
+    : Object.assign(document.createElement('canvas'), { width: w, height: h });
 
 /** Whether a project has any clip that needs the person matte (background removal, retouch, body effects, person or background color). */
 export function usesPersonMatte(project) {
-  return (project?.tracks || []).some((t) => t.clips.some((c) => (c.cutout || retouchAmounts(c.retouch) || clipUsesBodyEffect(c) || c.colorTarget) && !c.disabled));
+  return (project?.tracks || []).some((t) =>
+    t.clips.some((c) => (c.cutout || retouchAmounts(c.retouch) || clipUsesBodyEffect(c) || c.colorTarget) && !c.disabled)
+  );
 }
 
 /** Whether a project needs any of the people models (person matte, face or pose landmarks, hair matte). */
@@ -62,32 +75,46 @@ export function onCutoutReady(fn) {
   };
 }
 
+function waitSeeked(src) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 600);
+    src.addEventListener(
+      'seeked',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
+
+async function ensureVideoSourceSynced(src, layer) {
+  if (!src || typeof src.seeking !== 'boolean') return;
+  if (src.seeking) await waitSeeked(src);
+  if (typeof src.currentTime === 'number') {
+    const targetSec = (layer.sourceTime || 0) / 1e6;
+    if (Math.abs(src.currentTime - targetSec) > 0.08) {
+      await waitSeeked(src);
+    }
+  }
+}
+
 /** Mattes per clip: the frame they were made from and the result. */
 export class MatteCache {
   constructor(onUpdate = null) {
-    this.entries = new Map(); // clipId -> { frameKey, raw (model matte), strokes, canvas, version, ... }
+    this.entries = new Map(); // clipId -> { frameKey, raw, fgr, rgba, strokes, canvas, sourceSnap, snapVersion, version, ... }
+    this.frameHistory = new Map(); // `${clipId}:${frameKey}` -> frameData { raw, fgr, w, h, sec, frameKey }
     this.input = null;
     this.inputCtx = null;
-    this.pending = new Map(); // clipId -> frameKey
+    this.snap = null;
+    this.snapCtx = null;
+    this.pending = new Map(); // clipId -> { frameKey, promise, queued }
     this.onUpdate = onUpdate;
   }
 
   _dims(info) {
-    const sw = info?.width || 1280;
-    const sh = info?.height || 720;
-    const aspect = sw / sh;
-    const maxDim = 640;
-    let w, h;
-    if (aspect >= 1) {
-      w = maxDim;
-      h = Math.round(maxDim / aspect);
-    } else {
-      h = maxDim;
-      w = Math.round(maxDim * aspect);
-    }
-    w = Math.max(16, Math.round(w / 2) * 2);
-    h = Math.max(16, Math.round(h / 2) * 2);
-    return { w, h };
+    return computeMatteDims(info?.width || 1280, info?.height || 720);
   }
 
   _input(w, h) {
@@ -98,11 +125,21 @@ export class MatteCache {
     return this.inputCtx;
   }
 
-  async _runSegment(src, info, recurrentState = null) {
+  _captureSnap(src, w, h) {
+    if (!src || !w || !h) return null;
+    if (!this.snap || this.snap.width !== w || this.snap.height !== h) {
+      this.snap = makeCanvas(w, h);
+      this.snapCtx = this.snap.getContext('2d');
+    }
+    if (!drawUpright(this.snapCtx, src, w, h)) return null;
+    return this.snap;
+  }
+
+  async _runSegment(src, info, recurrentState = null, clipId = null) {
     const { w, h } = this._dims(info);
     if (!drawUpright(this._input(w, h), src, w, h)) return null;
     try {
-      const res = segment(this.input, { width: w, height: h, recurrentState, downsampleRatio: 0.5 });
+      const res = segment(this.input, { width: w, height: h, recurrentState, stateKey: clipId, downsampleRatio: 0.5 });
       return res instanceof Promise ? await res : res;
     } catch (err) {
       console.error(err);
@@ -110,61 +147,132 @@ export class MatteCache {
     }
   }
 
+  _applyEntry(clipId, layer, info, frame, snapCanvas = null) {
+    let e = this.entries.get(clipId);
+    if (!e) {
+      e = {
+        canvas: makeCanvas(frame.w, frame.h),
+        version: 0,
+        snapVersion: 0,
+        sourceSnap: null,
+        sourceSnapCtx: null,
+        rgba: null,
+        ov: null,
+        ovFor: null,
+        recurrentState: null,
+      };
+      this.entries.set(clipId, e);
+    }
+    if (snapCanvas) {
+      const sw = snapCanvas.width;
+      const sh = snapCanvas.height;
+      if (!e.sourceSnap || e.sourceSnap.width !== sw || e.sourceSnap.height !== sh) {
+        e.sourceSnap = makeCanvas(sw, sh);
+        e.sourceSnapCtx = e.sourceSnap.getContext('2d');
+      }
+      e.sourceSnapCtx.clearRect(0, 0, sw, sh);
+      e.sourceSnapCtx.drawImage(snapCanvas, 0, 0, sw, sh);
+      e.snapVersion = (e.snapVersion || 0) + 1;
+    }
+    Object.assign(e, {
+      frameKey: frame.frameKey,
+      raw: frame.raw,
+      fgr: frame.fgr || null,
+      sec: frame.sec,
+      w: frame.w,
+      h: frame.h,
+      recurrentState: frame.recurrentState !== undefined ? frame.recurrentState : null,
+    });
+    const strokes = layer.cutout?.strokes || null;
+    this._compose(e, strokes, info);
+    return e;
+  }
+
+  _rememberFrame(clipId, frame) {
+    const k = `${clipId}:${frame.frameKey}`;
+    if (this.frameHistory.has(k)) this.frameHistory.delete(k);
+    this.frameHistory.set(k, {
+      frameKey: frame.frameKey,
+      raw: new Uint8ClampedArray(frame.raw),
+      fgr: frame.fgr ? new Uint8ClampedArray(frame.fgr) : null,
+      w: frame.w,
+      h: frame.h,
+      sec: frame.sec,
+      recurrentState: null,
+    });
+    if (this.frameHistory.size > 150) {
+      const oldest = this.frameHistory.keys().next().value;
+      this.frameHistory.delete(oldest);
+    }
+  }
+
   async _process(layer, info, frameKey, sec) {
     const clipId = layer.clip.id;
+    const cached = this.frameHistory.get(`${clipId}:${frameKey}`);
+    if (cached) {
+      this._applyEntry(clipId, layer, info, cached);
+      notifyCutoutReady();
+      this.onUpdate?.();
+      return;
+    }
+
     const existing = this.pending.get(clipId);
-    if (existing && existing.frameKey === frameKey) {
+    if (existing) {
+      if (existing.frameKey === frameKey) return existing.promise;
+      existing.queued = { layer, info, frameKey, sec };
       return existing.promise;
     }
 
+    const state = { frameKey, promise: null, queued: null };
     const run = async () => {
-      const src = info.source;
-      if (src && typeof src.seeking === 'boolean' && src.seeking) {
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, 600);
-          src.addEventListener('seeked', () => { clearTimeout(timer); resolve(); }, { once: true });
-        });
-      }
-      if (src && typeof src.currentTime === 'number' && typeof src.seeking === 'boolean') {
-        const targetSec = (layer.sourceTime || 0) / 1e6;
-        if (Math.abs(src.currentTime - targetSec) > 0.08) {
-          await new Promise((resolve) => {
-            const timer = setTimeout(resolve, 600);
-            src.addEventListener('seeked', () => { clearTimeout(timer); resolve(); }, { once: true });
-          });
+      let cur = { layer, info, frameKey, sec };
+      while (cur) {
+        state.frameKey = cur.frameKey;
+        await ensureVideoSourceSynced(cur.info.source, cur.layer);
+        const sw = cur.info?.width || cur.layer.width || 1280;
+        const sh = cur.info?.height || cur.layer.height || 720;
+        const snapCanvas = cur.info?.dynamic ? this._captureSnap(cur.info.source, sw, sh) : null;
+        const segSource = snapCanvas || cur.info.source;
+        const e = this.entries.get(clipId);
+        const dt = e ? Math.abs(e.sec - cur.sec) : Infinity;
+        const near = Boolean(e && e.recurrentState && dt < 0.25 && cur.sec >= (e.sec ?? 0) - 0.05);
+        const m = await this._runSegment(segSource, cur.info, near ? e.recurrentState : null, clipId);
+        if (m) {
+          const steadyNear = near && !m.sceneCut && e?.raw && e.raw.length === m.data.length;
+          const raw = steadyMatte(m.data, steadyNear ? e.raw : null, cur.layer.cutout?.smooth ?? CUTOUT_DEFAULT.smooth);
+          const frame = {
+            frameKey: cur.frameKey,
+            raw,
+            fgr: m.fgr || null,
+            w: m.width,
+            h: m.height,
+            sec: cur.sec,
+            recurrentState: m.recurrentState || null,
+          };
+          this._rememberFrame(clipId, frame);
+          this._applyEntry(clipId, cur.layer, cur.info, frame, snapCanvas);
+          notifyCutoutReady();
+          this.onUpdate?.();
         }
+        cur = state.queued;
+        state.queued = null;
       }
-      let e = this.entries.get(clipId);
-      const near = Boolean(e && Math.abs(e.sec - sec) < 0.2);
-      const m = await this._runSegment(info.source, info, near ? e?.recurrentState : null);
-      if (!m) return;
-      const steadyNear = near && e?.raw && e.raw.length === m.data.length;
-      const raw = steadyMatte(m.data, steadyNear ? e.raw : null, layer.cutout?.smooth ?? CUTOUT_DEFAULT.smooth);
-      if (!e) {
-        e = { canvas: makeCanvas(m.width, m.height), version: 0, img: null, ov: null, ovFor: null, recurrentState: null };
-        this.entries.set(clipId, e);
-      }
-      Object.assign(e, { frameKey, raw, sec, w: m.width, h: m.height, recurrentState: m.recurrentState || null });
-      const strokes = layer.cutout?.strokes || null;
-      this._compose(e, strokes, info);
-      notifyCutoutReady();
-      this.onUpdate?.();
     };
 
-    const promise = run();
-    this.pending.set(clipId, { frameKey, promise });
+    state.promise = run();
+    this.pending.set(clipId, state);
     try {
-      await promise;
+      await state.promise;
     } finally {
-      if (this.pending.get(clipId)?.frameKey === frameKey) {
+      if (this.pending.get(clipId) === state) {
         this.pending.delete(clipId);
       }
     }
   }
 
   /**
-   * Matte canvas for a layer showing `info` (the resolved source), or null
-   * while the model loads. The canvas is upright and the size of the model.
+   * Matte entry for a layer showing `info` (the resolved source), or null
+   * while the model loads.
    */
   get(layer, info) {
     if (segmenterState() !== 'ready') {
@@ -173,22 +281,24 @@ export class MatteCache {
     }
     const src = info.source;
     if (src && typeof src.seeking === 'boolean' && src.seeking) {
-      let e = this.entries.get(layer.clip.id);
-      return e || null;
+      return this.entries.get(layer.clip.id) || null;
     }
     const targetSec = (layer.sourceTime || 0) / 1e6;
     if (src && typeof src.currentTime === 'number' && typeof src.seeking === 'boolean') {
       if (Math.abs(src.currentTime - targetSec) > 0.08) {
-        let e = this.entries.get(layer.clip.id);
-        return e || null;
+        return this.entries.get(layer.clip.id) || null;
       }
     }
     const { sec, key: frameKey } = frameOf(layer, info);
     const strokes = layer.cutout?.strokes || null;
-    let e = this.entries.get(layer.clip.id);
+    const e = this.entries.get(layer.clip.id);
     if (e && e.frameKey === frameKey) {
       if (e.strokes !== strokes) this._compose(e, strokes, info);
       return e;
+    }
+    const cached = this.frameHistory.get(`${layer.clip.id}:${frameKey}`);
+    if (cached) {
+      return this._applyEntry(layer.clip.id, layer, info, cached);
     }
     this._process(layer, info, frameKey, sec);
     return e || null;
@@ -204,7 +314,7 @@ export class MatteCache {
       await new Promise((resolve) => src.addEventListener('seeked', resolve, { once: true }));
     }
     const { sec, key: frameKey } = frameOf(layer, info);
-    let e = this.entries.get(layer.clip.id);
+    const e = this.entries.get(layer.clip.id);
     if (e && e.frameKey === frameKey) {
       const strokes = layer.cutout?.strokes || null;
       if (e.strokes !== strokes) this._compose(e, strokes, info);
@@ -214,7 +324,11 @@ export class MatteCache {
     return this.entries.get(layer.clip.id) || null;
   }
 
-  /** Hand-painted strokes over the model's matte, written to the matte canvas. */
+  /**
+   * Pack unpremultiplied foreground RGB (e.fgr) and stroke-adjusted alpha (data)
+   * into an RGBA Uint8Array for direct WebGL2 texture upload without 2D canvas
+   * premultiplication loss.
+   */
   _compose(e, strokes, info) {
     let data = e.raw;
     if (strokes?.length) {
@@ -225,19 +339,37 @@ export class MatteCache {
       data = applyOverride(Uint8ClampedArray.from(e.raw), e.ov);
     }
     if (e.canvas.width !== e.w || e.canvas.height !== e.h) Object.assign(e.canvas, { width: e.w, height: e.h });
-    if (!e.img || e.img.width !== e.w || e.img.height !== e.h) {
-      e.img = new ImageData(e.w, e.h);
-      e.img.data.fill(255);
+    const byteLen = e.w * e.h * 4;
+    if (!e.rgba || e.rgba.length !== byteLen) {
+      e.rgba = new Uint8Array(byteLen);
     }
-    const px = e.img.data;
-    for (let i = 0; i < data.length; i++) px[i * 4 + 3] = data[i];
-    e.canvas.getContext('2d').putImageData(e.img, 0, 0);
+    const px = e.rgba;
+    const fgr = e.fgr;
+    if (fgr && fgr.length === data.length * 3) {
+      for (let i = 0; i < data.length; i++) {
+        const j = i << 2;
+        const k = i * 3;
+        px[j] = fgr[k];
+        px[j + 1] = fgr[k + 1];
+        px[j + 2] = fgr[k + 2];
+        px[j + 3] = data[i];
+      }
+    } else {
+      for (let i = 0; i < data.length; i++) {
+        const j = i << 2;
+        px[j] = 255;
+        px[j + 1] = 255;
+        px[j + 2] = 255;
+        px[j + 3] = data[i];
+      }
+    }
     e.strokes = strokes;
     e.version++;
   }
 
   dispose() {
     this.entries.clear();
+    this.frameHistory.clear();
     this.pending.clear();
   }
 }
@@ -258,9 +390,28 @@ export function bindPersonMatte(comp, layer, info) {
   if (!e) return segmenterState() === 'failed' ? undefined : null;
   const gl = comp.gl;
   gl.activeTexture(gl.TEXTURE0 + MATTE_UNIT);
-  const t = comp._texture({ key: `matte:${layer.clip.id}`, source: e.canvas, width: e.canvas.width, height: e.canvas.height, version: e.version });
+  const w = e.w || e.canvas.width;
+  const h = e.h || e.canvas.height;
+  const t = comp._texture({
+    key: `matte:${layer.clip.id}`,
+    source: e.rgba || e.canvas,
+    width: w,
+    height: h,
+    version: e.version,
+  });
+  let matchedTex = null;
+  if (info?.dynamic && e.sourceSnap && e.frameKey !== frameOf(layer, info).key) {
+    gl.activeTexture(gl.TEXTURE0);
+    matchedTex = comp._texture({
+      key: `matteSnap:${layer.clip.id}`,
+      source: e.sourceSnap,
+      width: e.sourceSnap.width,
+      height: e.sourceSnap.height,
+      version: e.snapVersion,
+    });
+  }
   gl.activeTexture(gl.TEXTURE0);
-  return t ? { ...t, mw: e.canvas.width, mh: e.canvas.height } : undefined;
+  return t ? { ...t, mw: w, mh: h, matchedTex } : undefined;
 }
 
 /** Ensure the person matte of a layer is ready before drawing (export and stills). */
@@ -273,6 +424,7 @@ export async function ensurePersonMatte(comp, layer, info) {
 /** Set the matte, cutout and retouch uniforms of the layer program for a layer drawn from `info`. */
 export function bindLayerMatte(comp, p, layer, info) {
   let on = 0;
+  let matchedTex = null;
   const media = layer.kind === 'media' && layer.clip && info?.source;
   const cut = Boolean(media && layer.cutout);
   const touch = media ? retouchAmounts(layer.retouch) : null;
@@ -281,9 +433,11 @@ export function bindLayerMatte(comp, p, layer, info) {
     const t = bindPersonMatte(comp, layer, info);
     if (t) {
       on = 1;
+      if (cut && t.matchedTex) matchedTex = t.matchedTex;
       const [lo, hi] = matteWindow(layer.cutout);
       comp._set(p, 'u_matteWin', lo, hi);
       comp._set(p, 'u_matteTexel', 1 / t.mw, 1 / t.mh);
+      comp._set(p, 'u_fgDecontaminate', cut ? foregroundDecontaminationAmount(layer.cutout) : 0);
     } else if (t === null) {
       // Still loading: hide a cut-out clip rather than flash its background.
       on = 2;
@@ -298,6 +452,7 @@ export function bindLayerMatte(comp, p, layer, info) {
   comp._seti(p, 'u_maskColor', media && layer.maskUse === 'color' && layer.masks?.length ? 1 : 0);
   bindBodyLayer(comp, p, layer, info);
   bindFaceLayer(comp, p, layer, info);
+  return matchedTex;
 }
 
 const COLOR_TARGETS = { person: 1, background: 2 };

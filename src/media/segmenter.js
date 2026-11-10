@@ -7,17 +7,28 @@
 import * as ort from 'onnxruntime-web';
 import modelUrl from './models/rvm_mobilenetv3.onnx?url';
 import { lazyModel } from './lazy-model.js';
+import {
+  configureOrtWasm,
+  createRvmSession,
+  computeMatteDims,
+  packRgbPlanes,
+  quantizeRvmOutputs,
+} from './segmenter-core.js';
 
 /** Base side dimension for backwards compatibility with tests and callers. */
 export const SEG_SIZE = 256;
 
-// Configure ONNX Runtime Web WASM paths locally so no external network requests are made.
-if (typeof location !== 'undefined') {
-  ort.env.wasm.wasmPaths = './';
+// Configure ONNX Runtime Web WASM paths locally using an absolute base URL so
+// dynamic import() inside bundled /assets/ chunks resolves to the root public/ files.
+let resolvedWasmPaths = './';
+if (typeof location !== 'undefined' && location.href) {
+  try {
+    resolvedWasmPaths = new URL('./', location.href).href;
+  } catch {
+    resolvedWasmPaths = './';
+  }
 }
-if (typeof navigator !== 'undefined' && typeof self !== 'undefined' && !self.crossOriginIsolated) {
-  ort.env.wasm.numThreads = 1;
-}
+configureOrtWasm(ort, resolvedWasmPaths);
 
 const makeCanvas = (w, h) =>
   typeof OffscreenCanvas === 'function'
@@ -36,21 +47,62 @@ function getHelper(w, h) {
 
 // Recurrent state tracking across frames for video temporal coherence
 let recurrentState = null;
+let cachedFloatData = null;
+const ZERO_STATE_TENSOR = new ort.Tensor('float32', new Float32Array([0]), [1, 1, 1, 1]);
 
-export function resetRecurrentState() {
+let workerInstance = null;
+let workerMsgId = 1;
+const workerPending = new Map();
+
+function callWorker(payload, transfer = []) {
+  return new Promise((resolve, reject) => {
+    const id = workerMsgId++;
+    workerPending.set(id, { resolve, reject });
+    workerInstance.postMessage({ ...payload, id }, transfer);
+  });
+}
+
+export function resetRecurrentState(stateKey = null) {
   recurrentState = null;
+  if (workerInstance) {
+    workerInstance.postMessage({ type: 'reset', stateKey });
+  }
 }
 
 const model = lazyModel(async () => {
-  const res = await fetch(modelUrl);
+  const absModelUrl =
+    typeof location !== 'undefined' && location.href
+      ? new URL(modelUrl, location.href).href
+      : modelUrl;
+
+  if (typeof Worker === 'function') {
+    try {
+      const w = new Worker(new URL('./segmenter-worker.js', import.meta.url), { type: 'module' });
+      w.onmessage = (e) => {
+        const msg = e.data;
+        const p = workerPending.get(msg.id);
+        if (!p) return;
+        workerPending.delete(msg.id);
+        if (msg.ok) p.resolve(msg);
+        else p.reject(new Error(msg.error || 'Worker error'));
+      };
+      w.onerror = (err) => {
+        for (const [, p] of workerPending) p.reject(err);
+        workerPending.clear();
+      };
+      workerInstance = w;
+      await callWorker({ type: 'init', modelUrl: absModelUrl, wasmPaths: resolvedWasmPaths });
+      return { mode: 'worker' };
+    } catch {
+      workerInstance = null;
+    }
+  }
+
+  const res = await fetch(absModelUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buffer = await res.arrayBuffer();
-
-  const session = await ort.InferenceSession.create(buffer, {
-    executionProviders: ['wasm'],
-    graphOptimizationLevel: 'all',
-  });
-  return session;
+  const session = await createRvmSession(ort, buffer);
+  return { mode: 'direct', session };
 }, 'Background removal could not start in this browser.');
 
 /** Subscribe to the model becoming ready (or failing); returns an unsubscribe. */
@@ -65,8 +117,8 @@ export const ready = (opts) => model.ready(opts);
  * bottom), or null while not ready.
  */
 export async function segment(image, opts = {}) {
-  const session = model.instance;
-  if (!session) return null;
+  const inst = model.instance;
+  if (!inst) return null;
 
   try {
     const srcW = image.videoWidth || image.naturalWidth || image.width || 640;
@@ -75,17 +127,7 @@ export async function segment(image, opts = {}) {
     let w = opts.width;
     let h = opts.height;
     if (!w || !h) {
-      const maxDim = 640;
-      const aspect = srcW / srcH;
-      if (aspect >= 1) {
-        w = maxDim;
-        h = Math.round(maxDim / aspect);
-      } else {
-        h = maxDim;
-        w = Math.round(maxDim * aspect);
-      }
-      w = Math.max(16, Math.round(w / 2) * 2);
-      h = Math.max(16, Math.round(h / 2) * 2);
+      ({ w, h } = computeMatteDims(srcW, srcH));
     }
 
     let px;
@@ -107,17 +149,40 @@ export async function segment(image, opts = {}) {
       px = g.getImageData(0, 0, w, h).data;
     }
 
-    const planeSize = w * h;
-    const floatData = new Float32Array(3 * planeSize);
-    for (let i = 0; i < planeSize; i++) {
-      const p4 = i * 4;
-      floatData[i] = px[p4] / 255.0;
-      floatData[planeSize + i] = px[p4 + 1] / 255.0;
-      floatData[2 * planeSize + i] = px[p4 + 2] / 255.0;
+    const downsampleRatio = opts.downsampleRatio ?? 0.5;
+
+    if (inst.mode === 'worker' && workerInstance) {
+      const copy = new Uint8ClampedArray(px);
+      const resetState = opts.recurrentState === null;
+      const stateKey = opts.stateKey || null;
+      const res = await callWorker(
+        {
+          type: 'segment',
+          w,
+          h,
+          rgbaBuffer: copy.buffer,
+          stateKey,
+          resetState,
+          recurrent: opts.recurrent !== false,
+          downsampleRatio,
+        },
+        [copy.buffer]
+      );
+      return {
+        data: new Uint8ClampedArray(res.dataBuffer),
+        fgr: res.fgrBuffer ? new Uint8ClampedArray(res.fgrBuffer) : null,
+        width: res.width,
+        height: res.height,
+        sceneCut: Boolean(res.sceneCut),
+        recurrentState: { workerManaged: true, w: res.width, h: res.height },
+      };
     }
 
-    const srcTensor = new ort.Tensor('float32', floatData, [1, 3, h, w]);
-    const zeroState = () => new ort.Tensor('float32', new Float32Array([0]), [1, 1, 1, 1]);
+    const session = inst.session;
+    const planeSize = w * h;
+    if (!cachedFloatData || cachedFloatData.length !== 3 * planeSize) {
+      cachedFloatData = new Float32Array(3 * planeSize);
+    }
 
     let stateToUse = null;
     if (opts.recurrentState !== undefined) {
@@ -125,15 +190,18 @@ export async function segment(image, opts = {}) {
     } else if (opts.recurrent !== false) {
       stateToUse = recurrentState;
     }
-    const hasValidState = Boolean(stateToUse && stateToUse.w === w && stateToUse.h === h);
+    const subsample = stateToUse?.subsample || new Float32Array(1024);
+    const meanDiff = packRgbPlanes(px, planeSize, cachedFloatData, subsample);
+    const sceneCut = Boolean(stateToUse && stateToUse.r1 && stateToUse.w === w && stateToUse.h === h && meanDiff > 0.13);
+    const hasValidState = Boolean(stateToUse && stateToUse.r1 && stateToUse.w === w && stateToUse.h === h && !sceneCut);
 
-    const downsampleRatio = opts.downsampleRatio ?? 0.5;
+    const srcTensor = new ort.Tensor('float32', cachedFloatData, [1, 3, h, w]);
     const feeds = {
       src: srcTensor,
-      r1i: hasValidState ? stateToUse.r1 : zeroState(),
-      r2i: hasValidState ? stateToUse.r2 : zeroState(),
-      r3i: hasValidState ? stateToUse.r3 : zeroState(),
-      r4i: hasValidState ? stateToUse.r4 : zeroState(),
+      r1i: hasValidState ? stateToUse.r1 : ZERO_STATE_TENSOR,
+      r2i: hasValidState ? stateToUse.r2 : ZERO_STATE_TENSOR,
+      r3i: hasValidState ? stateToUse.r3 : ZERO_STATE_TENSOR,
+      r4i: hasValidState ? stateToUse.r4 : ZERO_STATE_TENSOR,
       downsample_ratio: new ort.Tensor('float32', new Float32Array([downsampleRatio]), [1]),
     };
 
@@ -145,6 +213,7 @@ export async function segment(image, opts = {}) {
       r4: results.r4o,
       w,
       h,
+      subsample,
     };
     if (opts.recurrent !== false) {
       recurrentState = nextRecurrent;
@@ -152,12 +221,8 @@ export async function segment(image, opts = {}) {
       recurrentState = null;
     }
 
-    const pha = results.pha.data;
-    const out = new Uint8ClampedArray(planeSize);
-    for (let i = 0; i < planeSize; i++) {
-      out[i] = Math.round(Math.max(0, Math.min(1, pha[i])) * 255);
-    }
-    return { data: out, width: w, height: h, recurrentState: nextRecurrent };
+    const { out, fgrOut } = quantizeRvmOutputs(results.pha.data, results.fgr?.data, planeSize);
+    return { data: out, fgr: fgrOut, width: w, height: h, sceneCut, recurrentState: nextRecurrent };
   } catch (err) {
     console.error('[segmenter]', err);
     return null;

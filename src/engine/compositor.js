@@ -347,7 +347,11 @@ export class Compositor {
     gl.bindTexture(gl.TEXTURE_2D, entry.tex);
     if (needsUpload) {
       try {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, info.source);
+        if (info.source && ArrayBuffer.isView(info.source)) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, info.width, info.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, info.source);
+        } else {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, info.source);
+        }
         entry.version = info.version;
         entry.w = info.width;
         entry.h = info.height;
@@ -483,7 +487,8 @@ export class Compositor {
       this._set(p, 'u_keySpill', ch.spill || 0);
     }
     bindLayerMask(this, p, layer, box);
-    bindLayerMatte(this, p, layer, info);
+    const matchedTex = bindLayerMatte(this, p, layer, info);
+    if (matchedTex && !layer.removal && !layer.enhance) entry = matchedTex;
     this._bindTex(0, entry.tex);
     this._seti(p, 'u_tex', 0);
     gl.bindVertexArray(this.vao);

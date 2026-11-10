@@ -26,7 +26,7 @@ vi.mock('../src/media/segmenter.js', () => {
   };
 });
 
-import { CUTOUT_DEFAULT, normalizeCutout, normalizeStrokes, strokeOverride, applyOverride, matteWindow, steadyMatte } from '../src/model/cutout.js';
+import { CUTOUT_DEFAULT, CUTOUT_DEFAULT_DECONTAMINATE, foregroundDecontaminationAmount, normalizeCutout, normalizeStrokes, strokeOverride, applyOverride, matteWindow, steadyMatte } from '../src/model/cutout.js';
 import { normalizeClip, makeClip, createProject } from '../src/model/project.js';
 import { captureAttributes, applyAttributes, attributeGroupsFor } from '../src/ui/organize-actions.js';
 import { usesCutout } from '../src/engine/cutout.js';
@@ -42,6 +42,9 @@ describe('cutout model', () => {
   it('normalizes settings and clamps them', () => {
     expect(normalizeCutout({})).toEqual(CUTOUT_DEFAULT);
     expect(normalizeCutout({ feather: 400, shrink: -90, smooth: 'x' })).toEqual({ feather: 100, shrink: -50, smooth: CUTOUT_DEFAULT.smooth });
+    expect(normalizeCutout({ decontaminate: 140 }).decontaminate).toBe(100);
+    expect(foregroundDecontaminationAmount({})).toBe(CUTOUT_DEFAULT_DECONTAMINATE / 100);
+    expect(foregroundDecontaminationAmount({ decontaminate: 25 })).toBe(0.25);
   });
 
   it('keeps the field on video and image clips through a save', () => {
@@ -176,6 +179,11 @@ describe('cutout panel', () => {
     s.dispatchEvent(new Event('input', { bubbles: true }));
     s.dispatchEvent(new Event('change', { bubbles: true }));
     expect(clip().cutout.feather).toBe(70);
+    const decontaminateSlider = [...env.el.querySelectorAll('.field')].find((f) => f.querySelector('.field-label')?.textContent === 'Foreground decontamination').querySelector('input[type=range]');
+    decontaminateSlider.value = '90';
+    decontaminateSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    decontaminateSlider.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(clip().cutout.decontaminate).toBe(90);
     sw.click();
     expect(clip().cutout).toBeUndefined();
     sw.click();

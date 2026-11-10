@@ -1,17 +1,19 @@
 /**
  * Automatic background removal on video and image clips:
- * clip.cutout = { feather, shrink, smooth }. A person matte is found on
- * each frame (media/segmenter.js) and the compositor keeps only the
+ * clip.cutout = { feather, shrink, smooth, decontaminate }. A person matte is
+ * found on each frame (media/segmenter.js) and the compositor keeps only the
  * person (engine/cutout.js).
- *  - feather 0..100: how soft the edge is
- *  - shrink -50..50: pull the edge in (positive) or let more through (negative)
- *  - smooth 0..100: how much the matte is steadied from frame to frame
+ *  - feather 0..100: how soft the edge is (default 10 for crisp guided edges)
+ *  - shrink -50..50: pull the edge in (positive) or let more through (negative) (default 2)
+ *  - smooth 0..100: how much the matte is steadied from frame to frame (default 45)
+ *  - decontaminate 0..100 (optional): foreground decontamination strength at edges (default 85)
  *  - strokes (optional): hand-painted fixes, [{ keep, size, pts: [[u, v]...] }]
  *    with u, v in 0..1 of the source frame (top left origin) and size the
  *    brush diameter as a fraction of the frame height. Keep strokes add to
  *    the person, the others remove; later strokes win where they overlap.
  */
-export const CUTOUT_DEFAULT = Object.freeze({ feather: 15, shrink: 0, smooth: 40 });
+export const CUTOUT_DEFAULT = Object.freeze({ feather: 14, shrink: 2, smooth: 45 });
+export const CUTOUT_DEFAULT_DECONTAMINATE = 90;
 
 const num = (v, lo, hi, d) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : d);
 
@@ -24,9 +26,19 @@ export function normalizeCutout(c) {
     shrink: num(c.shrink, -50, 50, CUTOUT_DEFAULT.shrink),
     smooth: num(c.smooth, 0, 100, CUTOUT_DEFAULT.smooth),
   };
+  const dec = c?.decontaminate ?? c?.dehalo;
+  if (dec !== undefined) {
+    out.decontaminate = num(dec, 0, 100, CUTOUT_DEFAULT_DECONTAMINATE);
+  }
   const strokes = normalizeStrokes(c.strokes);
   if (strokes.length) out.strokes = strokes;
   return out;
+}
+
+/** Foreground decontamination strength (0..1) for a cutout setting. */
+export function foregroundDecontaminationAmount(cutout) {
+  const d = cutout?.decontaminate ?? cutout?.dehalo ?? CUTOUT_DEFAULT_DECONTAMINATE;
+  return num(d, 0, 100, CUTOUT_DEFAULT_DECONTAMINATE) / 100;
 }
 
 export function normalizeStrokes(list) {

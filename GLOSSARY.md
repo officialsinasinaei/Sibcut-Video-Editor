@@ -63,3 +63,15 @@ _Avoid_: Binary downloading hack, curl-in-build, on-the-fly fetch
 **Dynamic Library Validation**:
 A macOS Hardened Runtime security enforcement mechanism that restricts dynamic library (`.dylib`) loading to libraries signed with the same developer team ID unless explicitly relaxed via `com.apple.security.cs.disable-library-validation` for third-party C/FFI modules.
 _Avoid_: Mac dylib bypass, signing skip, amfi hack
+
+**Foreground Decontamination**:
+The unmixing of residual background color from semi-transparent boundary pixels (such as hair strands and motion-blurred edges) so that the composited subject carries only its true foreground color without bright halos or background color bleed.
+_Avoid_: Spill hack, edge tinting, halo masking, alpha clipping
+
+**Guided Matte Refinement**:
+The spatial alignment of a lower-resolution neural alpha matte to the full-resolution source image's color and luminance edges during compositing, preserving sub-pixel hair detail and sharp object boundaries.
+_Avoid_: Matte blurring, alpha upscaling, bilinear feathering
+
+**Recurrent Matte State**:
+The temporal hidden state carried across consecutive video frames by the matting network to maintain frame-to-frame boundary coherence and prevent edge chatter, reset cleanly upon non-contiguous seeks or clip changes.
+_Avoid_: Frame memory cache, alpha history buffer, matte state global
